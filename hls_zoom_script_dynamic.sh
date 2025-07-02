@@ -268,19 +268,106 @@ cp "$TEMP_DIR/merged_input.ts" "$OUTPUT_DIR/merged-0000.ts"
 cp "$TEMP_DIR/merged_input_fixed.ts" "$OUTPUT_DIR/merged-0000-fixed.ts"
 cp "$TEMP_DIR/zoomed-0000-fixed1.ts" "$OUTPUT_DIR/zoomed-0000-fixed1.ts"
 
-# 不需要重命名，保持原始文件名对应关系
-echo "📋 保持原始文件名对应关系..."
+# 检测zoom文件的实际时长
+echo "🔍 检测zoom处理后的文件时长..."
+ZOOM_FILE_DURATION=$(ffprobe -v quiet -show_entries format=duration -of csv=p=0 "$OUTPUT_DIR/zoomed-0000-fixed1.ts")
+if [ -z "$ZOOM_FILE_DURATION" ]; then
+  echo "⚠️ 无法检测zoom文件时长，使用原始合并时长"
+  ZOOM_FILE_DURATION="$ORIGINAL_DURATION"
+fi
+echo "📊 Zoom文件实际时长: ${ZOOM_FILE_DURATION}s"
 
+# 更新playlist.m3u8，智能替换被删除的分片
+echo "📝 智能更新playlist.m3u8..."
+TEMP_PLAYLIST="$TEMP_DIR/updated_playlist.m3u8"
+ORIGINAL_PLAYLIST="$OUTPUT_DIR/playlist.m3u8"
 
+# 解析原始playlist，提取所有分片信息
+PLAYLIST_INFO="$TEMP_DIR/playlist_info.txt"
+> "$PLAYLIST_INFO"
 
-# 替换原文件
-# mv "$TEMP_M3U8" "$M3U8_PATH"
+# 解析原始playlist的分片信息
+SEGMENT_INDEX=0
+while read line; do
+  if [[ $line =~ ^#EXTINF:([0-9]+\.?[0-9]*), ]]; then
+    DURATION="${BASH_REMATCH[1]}"
+    echo "DURATION:$DURATION" >> "$PLAYLIST_INFO"
+  elif [[ $line =~ \.ts$ ]]; then
+    echo "FILE:$line" >> "$PLAYLIST_INFO"
+    echo "INDEX:$SEGMENT_INDEX" >> "$PLAYLIST_INFO"
+    ((SEGMENT_INDEX++))
+  elif [[ $line =~ ^#EXT ]]; then
+    echo "HEADER:$line" >> "$PLAYLIST_INFO"
+  fi
+done < "$INPUT_DIR/playlist.m3u8"
+
+echo "📊 Playlist重建信息:"
+echo "   - 替换分片范围: $SEGMENT_START → $SEGMENT_END"
+echo "   - 替换为: zoomed-0000-fixed1.ts (${ZOOM_FILE_DURATION}s)"
+
+# 重建playlist
+{
+  # 输出头部信息
+  echo "#EXTM3U"
+  echo "#EXT-X-VERSION:6"
+  echo "#EXT-X-TARGETDURATION:4"
+  echo "#EXT-X-MEDIA-SEQUENCE:0"
+  echo "#EXT-X-INDEPENDENT-SEGMENTS"
+  echo "#EXT-X-DISCONTINUITY"
+  
+  # 处理分片替换
+  CURRENT_INDEX=0
+  REPLACED=false
+  
+  while read line; do
+    if [[ $line =~ ^DURATION:(.*) ]]; then
+      DURATION="${BASH_REMATCH[1]}"
+      read -r next_line
+      if [[ $next_line =~ ^FILE:(.*) ]]; then
+        FILENAME="${BASH_REMATCH[1]}"
+        read -r index_line
+        if [[ $index_line =~ ^INDEX:(.*) ]]; then
+          FILE_INDEX="${BASH_REMATCH[1]}"
+          
+          # 判断是否在替换范围内
+          if [ "$FILE_INDEX" -ge "$SEGMENT_START" ] && [ "$FILE_INDEX" -le "$SEGMENT_END" ]; then
+            # 在替换范围内，只插入一次zoom文件
+            if [ "$REPLACED" = false ]; then
+              echo "#EXTINF:${ZOOM_FILE_DURATION},"
+              echo "zoomed-0000-fixed1.ts"
+              REPLACED=true
+            fi
+            # 跳过原始分片
+          else
+            # 不在替换范围内，保持原样
+            echo "#EXTINF:${DURATION},"
+            echo "$FILENAME"
+          fi
+        fi
+      fi
+    fi
+  done < "$PLAYLIST_INFO"
+  
+  echo "#EXT-X-ENDLIST"
+} > "$TEMP_PLAYLIST"
+
+# 替换原playlist
+cp "$TEMP_PLAYLIST" "$ORIGINAL_PLAYLIST"
+echo "✅ Playlist更新完成！"
+
+# 生成完整的播放列表用于验证
+echo "📋 生成验证用的完整播放列表..."
+VERIFY_PLAYLIST="$OUTPUT_DIR/playlist_zoomed_final.m3u8"
+cp "$TEMP_PLAYLIST" "$VERIFY_PLAYLIST"
 
 echo "🧹 清理临时文件夹..."
 # rm -rf "$TEMP_DIR"
 
 echo "✅ Zoom 动画处理完成！"
 echo "📁 最终输出目录: $OUTPUT_DIR"
-echo "📁 输出文件: temp_hls_zoom_4k/zoomed-0000.mp4"
+echo "📁 主要文件:"
+echo "   - zoomed-0000-fixed1.ts (${ZOOM_FILE_DURATION}s) - Zoom处理后的文件"
+echo "   - playlist.m3u8 - 更新后的播放列表"
+echo "   - playlist_zoomed_final.m3u8 - 验证用完整列表"
 echo "🎞️ 使用帧率: $FPS fps"
-echo "🎬 播放命令：ffplay \"temp_hls_zoom_4k/zoomed-0000.mp4\"" 
+echo "🎬 播放命令：ffplay \"$OUTPUT_DIR/playlist.m3u8\"" 
