@@ -31,6 +31,21 @@ PRE_SCALE_WIDTH=8000
 OUTPUT_WIDTH=3456
 OUTPUT_HEIGHT=2234
 
+# 设置错误处理和清理功能
+cleanup() {
+  echo "🧹 执行清理操作..."
+  if [ -n "${TEMP_DIR:-}" ] && [ -d "$TEMP_DIR" ]; then
+    rm -rf "$TEMP_DIR"
+    echo "📁 已删除临时目录: $TEMP_DIR"
+  fi
+  # 清理可能存在的临时文件
+  rm -f "temp_hls_zoom_"*/segment_info.txt 2>/dev/null || true
+  rm -f "temp_hls_zoom_"*/target_segments.txt 2>/dev/null || true
+}
+
+# 设置信号处理，在脚本异常退出时自动清理
+trap cleanup EXIT INT TERM
+
 # M3U8解析和分片计算
 echo "📋 解析M3U8播放列表..."
 M3U8_PATH="$INPUT_DIR/$M3U8_FILE"
@@ -253,7 +268,7 @@ zoompan=
 [last]scale=${OUTPUT_WIDTH}:${OUTPUT_HEIGHT}[last_scaled];
 
 [first_scaled][zoomed_scaled][last_scaled]concat=n=3:v=1:a=0[outv]
-" -map "[outv]" -map 0:a -c:v libx264 -r $FPS -c:a copy -y "$TEMP_DIR/zoomed-0000-fixed1.ts"
+" -map "[outv]" -map 0:a -c:v libx264 -r $FPS -c:a copy -y "$TEMP_DIR/zoomed.ts"
 
 # 删除原始的目标分片
 echo "🗑️ 删除原始的目标分片 ($SEGMENT_START 到 $SEGMENT_END)..."
@@ -264,13 +279,11 @@ done
 
 # 拷贝合并后的文件（而不是zoom处理后的文件）到输出目录
 echo "📋 拷贝合并后的文件到输出目录..."
-cp "$TEMP_DIR/merged_input.ts" "$OUTPUT_DIR/merged-0000.ts"
-cp "$TEMP_DIR/merged_input_fixed.ts" "$OUTPUT_DIR/merged-0000-fixed.ts"
-cp "$TEMP_DIR/zoomed-0000-fixed1.ts" "$OUTPUT_DIR/zoomed-0000-fixed1.ts"
+cp "$TEMP_DIR/zoomed.ts" "$OUTPUT_DIR/zoomed.ts"
 
 # 检测zoom文件的实际时长
 echo "🔍 检测zoom处理后的文件时长..."
-ZOOM_FILE_DURATION=$(ffprobe -v quiet -show_entries format=duration -of csv=p=0 "$OUTPUT_DIR/zoomed-0000-fixed1.ts")
+ZOOM_FILE_DURATION=$(ffprobe -v quiet -show_entries format=duration -of csv=p=0 "$OUTPUT_DIR/zoomed.ts")
 if [ -z "$ZOOM_FILE_DURATION" ]; then
   echo "⚠️ 无法检测zoom文件时长，使用原始合并时长"
   ZOOM_FILE_DURATION="$ORIGINAL_DURATION"
@@ -303,7 +316,7 @@ done < "$INPUT_DIR/playlist.m3u8"
 
 echo "📊 Playlist重建信息:"
 echo "   - 替换分片范围: $SEGMENT_START → $SEGMENT_END"
-echo "   - 替换为: zoomed-0000-fixed1.ts (${ZOOM_FILE_DURATION}s)"
+echo "   - 替换为: zoomed.ts (${ZOOM_FILE_DURATION}s)"
 
 # 重建playlist
 {
@@ -334,7 +347,7 @@ echo "   - 替换为: zoomed-0000-fixed1.ts (${ZOOM_FILE_DURATION}s)"
             # 在替换范围内，只插入一次zoom文件
             if [ "$REPLACED" = false ]; then
               echo "#EXTINF:${ZOOM_FILE_DURATION},"
-              echo "zoomed-0000-fixed1.ts"
+              echo "zoomed.ts"
               REPLACED=true
             fi
             # 跳过原始分片
@@ -355,19 +368,13 @@ echo "   - 替换为: zoomed-0000-fixed1.ts (${ZOOM_FILE_DURATION}s)"
 cp "$TEMP_PLAYLIST" "$ORIGINAL_PLAYLIST"
 echo "✅ Playlist更新完成！"
 
-# 生成完整的播放列表用于验证
-echo "📋 生成验证用的完整播放列表..."
-VERIFY_PLAYLIST="$OUTPUT_DIR/playlist_zoomed_final.m3u8"
-cp "$TEMP_PLAYLIST" "$VERIFY_PLAYLIST"
-
-echo "🧹 清理临时文件夹..."
-# rm -rf "$TEMP_DIR"
+echo "🧹 自动清理临时文件..."
+# 清理由 trap 自动执行
 
 echo "✅ Zoom 动画处理完成！"
 echo "📁 最终输出目录: $OUTPUT_DIR"
 echo "📁 主要文件:"
-echo "   - zoomed-0000-fixed1.ts (${ZOOM_FILE_DURATION}s) - Zoom处理后的文件"
+echo "   - zoomed.ts (${ZOOM_FILE_DURATION}s) - Zoom处理后的文件"
 echo "   - playlist.m3u8 - 更新后的播放列表"
-echo "   - playlist_zoomed_final.m3u8 - 验证用完整列表"
 echo "🎞️ 使用帧率: $FPS fps"
 echo "🎬 播放命令：ffplay \"$OUTPUT_DIR/playlist.m3u8\"" 
