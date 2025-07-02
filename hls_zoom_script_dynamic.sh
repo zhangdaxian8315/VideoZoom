@@ -27,6 +27,12 @@ OUTPUT_DIR="${INPUT_DIR}_zoomed"
 TEMP_DIR="temp_hls_zoom_$(basename "$INPUT_DIR")"
 M3U8_FILE="playlist.m3u8"
 
+# 检查并清理已存在的输出目录
+if [ -d "$OUTPUT_DIR" ]; then
+  echo "🗑️ 检测到已存在的输出目录，正在删除: $OUTPUT_DIR"
+  rm -rf "$OUTPUT_DIR"
+fi
+
 PRE_SCALE_WIDTH=8000
 OUTPUT_WIDTH=3456
 OUTPUT_HEIGHT=2234
