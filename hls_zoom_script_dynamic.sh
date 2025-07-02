@@ -27,11 +27,69 @@ OUTPUT_DIR="${INPUT_DIR}_zoomed"
 TEMP_DIR="temp_hls_zoom_$(basename "$INPUT_DIR")"
 M3U8_FILE="playlist.m3u8"
 
-SEGMENT_START=0
-SEGMENT_END=2
 PRE_SCALE_WIDTH=8000
 OUTPUT_WIDTH=3456
 OUTPUT_HEIGHT=2234
+
+# M3U8解析和分片计算
+echo "📋 解析M3U8播放列表..."
+M3U8_PATH="$INPUT_DIR/$M3U8_FILE"
+
+# 提取分片信息：时长和文件名
+SEGMENT_INFO="$TEMP_DIR/segment_info.txt"
+mkdir -p "$TEMP_DIR"
+> "$SEGMENT_INFO"
+
+# 解析M3U8文件，提取EXTINF和分片文件名
+grep -E "^#EXTINF:|^[^#].*\.ts$" "$M3U8_PATH" | while read line; do
+  if [[ $line =~ ^#EXTINF:([0-9]+\.?[0-9]*), ]]; then
+    echo "DURATION:${BASH_REMATCH[1]}"
+  elif [[ $line =~ \.ts$ ]]; then
+    echo "FILE:$line"
+  fi
+done > "$SEGMENT_INFO"
+
+# 计算每个分片的时间范围并找到目标分片
+echo "🔍 计算分片时间范围，查找目标分片..."
+CURRENT_TIME=0
+SEGMENT_INDEX=0
+TARGET_SEGMENTS_FILE="$TEMP_DIR/target_segments.txt"
+> "$TARGET_SEGMENTS_FILE"
+
+while read line; do
+  if [[ $line =~ ^DURATION:(.*) ]]; then
+    DURATION="${BASH_REMATCH[1]}"
+    read -r next_line
+    if [[ $next_line =~ ^FILE:(.*) ]]; then
+      FILENAME="${BASH_REMATCH[1]}"
+      
+      # 计算分片时间范围
+      START_TIME="$CURRENT_TIME"
+      END_TIME=$(echo "$CURRENT_TIME + $DURATION" | bc -l)
+      
+      # 检查这个分片是否与ZOOM时间段重叠
+      # 重叠条件：分片结束时间 > ZOOM_START 且 分片开始时间 < ZOOM_END
+      if (( $(echo "$END_TIME > $ZOOM_START" | bc -l) )) && (( $(echo "$START_TIME < $ZOOM_END" | bc -l) )); then
+        echo "$SEGMENT_INDEX" >> "$TARGET_SEGMENTS_FILE"
+        echo "📌 选中分片 $SEGMENT_INDEX: $FILENAME (${START_TIME}s-${END_TIME}s) 与Zoom时间段 ${ZOOM_START}s-${ZOOM_END}s 重叠"
+      fi
+      
+      CURRENT_TIME="$END_TIME"
+      ((SEGMENT_INDEX++))
+    fi
+  fi
+done < "$SEGMENT_INFO"
+
+# 读取目标分片并设置范围
+if [ ! -s "$TARGET_SEGMENTS_FILE" ]; then
+  echo "❌ 错误: 没有找到与Zoom时间段重叠的分片"
+  exit 1
+fi
+
+SEGMENT_START=$(head -1 "$TARGET_SEGMENTS_FILE")
+SEGMENT_END=$(tail -1 "$TARGET_SEGMENTS_FILE")
+
+echo "🎯 目标分片范围: $SEGMENT_START 到 $SEGMENT_END (共 $((SEGMENT_END - SEGMENT_START + 1)) 个分片)"
 
 
 
@@ -48,17 +106,34 @@ mkdir -p "$TEMP_DIR"
 echo "📋 拷贝原始 m3u8 和 ts 文件..."
 cp -r "$INPUT_DIR"/* "$OUTPUT_DIR/"
 
+# 提取分片文件名前缀（从第一个ts文件名中提取）
+FIRST_TS_FILE=$(grep "\.ts$" "$M3U8_PATH" | head -1)
+if [[ $FIRST_TS_FILE =~ ^(.+)-video-[0-9]+\.ts$ ]]; then
+  FILE_PREFIX="${BASH_REMATCH[1]}"
+else
+  echo "❌ 错误: 无法解析分片文件名格式"
+  exit 1
+fi
+
+echo "📂 检测到文件前缀: $FILE_PREFIX"
+
 # 合并要处理的 ts 分片
 echo "🔗 合并分片 $SEGMENT_START 到 $SEGMENT_END..."
-CONCAT_LIST="$INPUT_DIR/concat_list.txt"
+CONCAT_LIST="$TEMP_DIR/concat_list.txt"
 > "$CONCAT_LIST"
 
 for i in $(seq $SEGMENT_START $SEGMENT_END); do
-  SEG=$(printf "%s-video-%04d.ts" "01JYZZ0BN3RX7CZYM13FCSQJKA" $i)
-  echo "file '$SEG'" >> "$CONCAT_LIST"
+  SEG=$(printf "%s-video-%04d.ts" "$FILE_PREFIX" $i)
+  # 使用相对路径：从临时目录看输入目录的相对位置
+  echo "file '../$INPUT_DIR/$SEG'" >> "$CONCAT_LIST"
 done
 
 ffmpeg -f concat -safe 0 -i "$CONCAT_LIST" -c copy "$TEMP_DIR/merged_input.ts" -y
+# ffmpeg -f concat -safe 0 -i "$CONCAT_LIST" \
+#   -c:v libx264 -preset fast -crf 18 \
+#   -c:a copy \
+#   -avoid_negative_ts make_zero \
+#   "$TEMP_DIR/merged_input.ts" -y
 
 # 转码为mp4，重置时间戳从0开始
 echo "🔄 转码为mp4，重置时间戳..."
@@ -103,24 +178,75 @@ else
   echo "📊 原始时长: $ORIGINAL_DURATION"
 fi
 
-# 应用 zoompan 放大动画处理（带前期 scale 放大 + 动态时间戳调整）
+# 计算相对于合并分片的时间偏移
+echo "🔄 计算动态zoom时间参数..."
+
+# 计算第一个目标分片的开始时间
+CURRENT_TIME=0
+SEGMENT_INDEX=0
+FIRST_SEGMENT_START_TIME=0
+
+while read line; do
+  if [[ $line =~ ^DURATION:(.*) ]]; then
+    DURATION="${BASH_REMATCH[1]}"
+    read -r next_line
+    if [[ $next_line =~ ^FILE:(.*) ]]; then
+      if [ "$SEGMENT_INDEX" -eq "$SEGMENT_START" ]; then
+        FIRST_SEGMENT_START_TIME="$CURRENT_TIME"
+        break
+      fi
+      CURRENT_TIME=$(echo "$CURRENT_TIME + $DURATION" | bc -l)
+      ((SEGMENT_INDEX++))
+    fi
+  fi
+done < "$SEGMENT_INFO"
+
+# 计算相对时间（相对于合并后分片的开始）
+REL_ZOOM_START=$(echo "$ZOOM_START - $FIRST_SEGMENT_START_TIME" | bc -l)
+REL_ZOOM_END=$(echo "$ZOOM_END - $FIRST_SEGMENT_START_TIME" | bc -l)
+ZOOM_DURATION=$(echo "$REL_ZOOM_END - $REL_ZOOM_START" | bc -l)
+
+echo "📊 动态zoom参数:"
+echo "   - 原始zoom时间段: ${ZOOM_START}s → ${ZOOM_END}s"
+echo "   - 相对zoom时间段: ${REL_ZOOM_START}s → ${REL_ZOOM_END}s"  
+echo "   - Zoom持续时间: ${ZOOM_DURATION}s"
+echo "   - Zoom模式: 对称放大缩小 (1x → 2x → 1x)"
+
+# 应用 zoompan 放大动画处理（参考原始代码逻辑）
 echo "🎞️ 开始 Zoom 动画处理..."
 FPS_FILTER="fps=$FPS"
+
+# 设置过渡时间（参考原始代码）
+ZOOM_IN_TIME="2.0"   # 放大时间：2秒 (it=0→2)
+ZOOM_OUT_TIME="2.0"  # 缩小时间：2秒 
+ZOOM_OUT_START=$(echo "$ZOOM_DURATION - $ZOOM_OUT_TIME" | bc -l)
+
+echo "🔍 动态Zoompan参数 (参考原始逻辑):"
+echo "   - Zoom总时长: ${ZOOM_DURATION}s"
+echo "   - 放大阶段(it: 0→${ZOOM_IN_TIME}s): 1x → 2x"
+echo "   - 保持阶段(it: ${ZOOM_IN_TIME}s→${ZOOM_OUT_START}s): 2x"
+echo "   - 缩小阶段(it: ${ZOOM_OUT_START}s→${ZOOM_DURATION}s): 2x → 1x"
+
+echo "🔍 Zoompan公式 (it=时间戳/秒):"
+echo "   z='if(lt(it,${ZOOM_IN_TIME}), 1+it/${ZOOM_IN_TIME},"
+echo "      if(lt(it,${ZOOM_OUT_START}), 2,"
+echo "      if(lt(it,${ZOOM_DURATION}), 2-(it-${ZOOM_OUT_START})/${ZOOM_OUT_TIME}, 1)))'"
+
 ffmpeg -hide_banner -i "$TEMP_DIR/merged_input_fixed.ts" -filter_complex "
 [0:v]${FPS_FILTER},scale=${PRE_SCALE_WIDTH}:-1,split=3[pre][zoom][post];
 
-[zoom]trim=start=3:end=11,setpts=PTS-STARTPTS,
+[zoom]trim=start=${REL_ZOOM_START}:end=${REL_ZOOM_END},setpts=PTS-STARTPTS,
 zoompan=
-  z='if(lt(it,2), 1+it/2,
-     if(lt(it,6), 2,
-     if(lt(it,8), 2 - (it-6)/2, 1)))':
+  z='if(lt(it,${ZOOM_IN_TIME}), 1+it/${ZOOM_IN_TIME},
+     if(lt(it,${ZOOM_OUT_START}), 2,
+     if(lt(it,${ZOOM_DURATION}), 2-(it-${ZOOM_OUT_START})/${ZOOM_OUT_TIME}, 1)))':
   x='iw/2-(iw/zoom/2)':
   y='ih/2-(ih/zoom/2)':
   d=1:fps=$FPS:s=${PRE_SCALE_WIDTH}x$(($PRE_SCALE_WIDTH * 2234 / 3456))
 [zoomed];
 
-[pre]trim=end=3,setpts=PTS-STARTPTS[first];
-[post]trim=start=11,setpts=PTS-STARTPTS[last];
+[pre]trim=end=${REL_ZOOM_START},setpts=PTS-STARTPTS[first];
+[post]trim=start=${REL_ZOOM_END},setpts=PTS-STARTPTS[last];
 
 [first]scale=${OUTPUT_WIDTH}:${OUTPUT_HEIGHT}[first_scaled];
 [zoomed]scale=${OUTPUT_WIDTH}:${OUTPUT_HEIGHT}[zoomed_scaled];
@@ -129,10 +255,10 @@ zoompan=
 [first_scaled][zoomed_scaled][last_scaled]concat=n=3:v=1:a=0[outv]
 " -map "[outv]" -map 0:a -c:v libx264 -r $FPS -c:a copy -y "$TEMP_DIR/zoomed-0000-fixed1.ts"
 
-# 删除原始的前3个分片
-echo "🗑️ 删除原始的前3个分片..."
+# 删除原始的目标分片
+echo "🗑️ 删除原始的目标分片 ($SEGMENT_START 到 $SEGMENT_END)..."
 for i in $(seq $SEGMENT_START $SEGMENT_END); do
-  DST=$(printf "$OUTPUT_DIR/01JYZZ0BN3RX7CZYM13FCSQJKA-video-%04d.ts" $i)
+  DST=$(printf "$OUTPUT_DIR/%s-video-%04d.ts" "$FILE_PREFIX" $i)
   rm -f "$DST"
 done
 
