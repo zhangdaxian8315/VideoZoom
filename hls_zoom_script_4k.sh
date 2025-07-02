@@ -45,6 +45,11 @@ ffmpeg -f concat -safe 0 -i "$CONCAT_LIST" -c copy "$TEMP_DIR/merged_input.ts" -
 # 转码为mp4，重置时间戳从0开始
 echo "🔄 转码为mp4，重置时间戳..."
 ffmpeg -i "$TEMP_DIR/merged_input.ts" -c:v libx264 -preset fast -crf 18 -c:a aac -b:a 128k -avoid_negative_ts make_zero "$TEMP_DIR/merged_input.mp4" -y
+ffmpeg -fflags +genpts -i "$TEMP_DIR/merged_input.ts" \
+  -c copy -avoid_negative_ts make_zero \
+  -muxdelay 0 -muxpreload 0 \
+  "$TEMP_DIR/merged_input_fixed.ts" -y
+
 
 # 从merged_input.mp4读取FPS
 echo "🔍 检测merged_input.mp4的帧率..."
@@ -83,7 +88,7 @@ fi
 # 应用 zoompan 放大动画处理（带前期 scale 放大 + 动态时间戳调整）
 echo "🎞️ 开始 Zoom 动画处理..."
 FPS_FILTER="fps=$FPS"
-ffmpeg -hide_banner -i "$TEMP_DIR/merged_input.mp4" -filter_complex "
+ffmpeg -hide_banner -i "$TEMP_DIR/merged_input_fixed.ts" -filter_complex "
 [0:v]${FPS_FILTER},scale=${PRE_SCALE_WIDTH}:-1,split=3[pre][zoom][post];
 
 [zoom]trim=start=3:end=11,setpts=PTS-STARTPTS,
@@ -104,7 +109,7 @@ zoompan=
 [last]scale=${OUTPUT_WIDTH}:${OUTPUT_HEIGHT}[last_scaled];
 
 [first_scaled][zoomed_scaled][last_scaled]concat=n=3:v=1:a=0[outv]
-" -map "[outv]" -map 0:a -c:v libx264 -r $FPS -c:a copy -y "$TEMP_DIR/zoomed-0000.mp4"
+" -map "[outv]" -map 0:a -c:v libx264 -r $FPS -c:a copy -y "$TEMP_DIR/zoomed-0000-fixed1.ts"
 
 # 删除原始的前3个分片
 echo "🗑️ 删除原始的前3个分片..."
@@ -116,7 +121,8 @@ done
 # 拷贝合并后的文件（而不是zoom处理后的文件）到输出目录
 echo "📋 拷贝合并后的文件到输出目录..."
 cp "$TEMP_DIR/merged_input.ts" "$OUTPUT_DIR/merged-0000.ts"
-cp "$TEMP_DIR/merged_input.ts" "$OUTPUT_DIR/merged-0000.ts"
+cp "$TEMP_DIR/merged_input_fixed.ts" "$OUTPUT_DIR/merged-0000-fixed.ts"
+cp "$TEMP_DIR/zoomed-0000-fixed1.ts" "$OUTPUT_DIR/zoomed-0000-fixed1.ts"
 
 # 不需要重命名，保持原始文件名对应关系
 echo "📋 保持原始文件名对应关系..."
