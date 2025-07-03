@@ -4,12 +4,13 @@ set -e
 
 # 参数解析
 if [ $# -lt 3 ]; then
-  echo "❌ 用法: $0 <INPUT_DIR> <ZOOM_START> <ZOOM_END> [ZOOM_CENTER_X] [ZOOM_CENTER_Y]"
+  echo "❌ 用法: $0 <INPUT_DIR> <ZOOM_START> <ZOOM_END> [ZOOM_CENTER_X] [ZOOM_CENTER_Y] [INCREMENTAL]"
   echo "  INPUT_DIR      - HLS文件夹路径"
   echo "  ZOOM_START     - Zoom开始时间(秒)"
   echo "  ZOOM_END       - Zoom结束时间(秒)"
   echo "  ZOOM_CENTER_X  - Zoom中心点X坐标 (0.0-1.0, 默认0.5)"
   echo "  ZOOM_CENTER_Y  - Zoom中心点Y坐标 (0.0-1.0, 默认0.5)"
+  echo "  INCREMENTAL    - 增量模式 (1=是, 0=否, 默认0)"
   exit 1
 fi
 
@@ -18,9 +19,10 @@ INPUT_DIR="$1"
 ZOOM_START="$2"
 ZOOM_END="$3"
 
-# 可选参数 - Zoom中心点坐标
+# 可选参数 - Zoom中心点坐标和增量模式
 ZOOM_CENTER_X="${4:-0.5}"
 ZOOM_CENTER_Y="${5:-0.5}"
+INCREMENTAL="${6:-0}"
 
 # 基本验证
 if [ ! -d "$INPUT_DIR" ]; then
@@ -44,15 +46,30 @@ OUTPUT_DIR="${INPUT_DIR}_zoomed"
 TEMP_DIR="temp_hls_zoom_$(basename "$INPUT_DIR")"
 M3U8_FILE="playlist.m3u8"
 
-# 检查并清理已存在的输出目录
-if [ -d "$OUTPUT_DIR" ]; then
+# 动态获取原视频分辨率
+echo "🔍 检测原视频分辨率..."
+ORIGINAL_WIDTH=$(ffprobe -v quiet -select_streams v:0 -show_entries stream=width -of csv=p=0 "$INPUT_DIR/$(grep "\.ts$" "$INPUT_DIR/$M3U8_FILE" | head -1)" | head -1)
+ORIGINAL_HEIGHT=$(ffprobe -v quiet -select_streams v:0 -show_entries stream=height -of csv=p=0 "$INPUT_DIR/$(grep "\.ts$" "$INPUT_DIR/$M3U8_FILE" | head -1)" | head -1)
+
+if [ -z "$ORIGINAL_WIDTH" ] || [ -z "$ORIGINAL_HEIGHT" ]; then
+  echo "⚠️ 无法检测原视频分辨率，使用默认值"
+  ORIGINAL_WIDTH=3456
+  ORIGINAL_HEIGHT=2234
+fi
+
+echo "📊 检测到原视频分辨率: ${ORIGINAL_WIDTH}x${ORIGINAL_HEIGHT}"
+
+# 检查并清理已存在的输出目录（仅在非增量模式下）
+if [ "$INCREMENTAL" = "0" ] && [ -d "$OUTPUT_DIR" ]; then
   echo "🗑️ 检测到已存在的输出目录，正在删除: $OUTPUT_DIR"
   rm -rf "$OUTPUT_DIR"
+elif [ "$INCREMENTAL" = "1" ] && [ -d "$OUTPUT_DIR" ]; then
+  echo "📁 增量模式：使用现有输出目录: $OUTPUT_DIR"
 fi
 
 PRE_SCALE_WIDTH=8000
-OUTPUT_WIDTH=3456
-OUTPUT_HEIGHT=2234
+OUTPUT_WIDTH=$ORIGINAL_WIDTH
+OUTPUT_HEIGHT=$ORIGINAL_HEIGHT
 
 # 设置错误处理和清理功能
 cleanup() {
@@ -129,8 +146,6 @@ SEGMENT_END=$(tail -1 "$TARGET_SEGMENTS_FILE")
 
 echo "🎯 目标分片范围: $SEGMENT_START 到 $SEGMENT_END (共 $((SEGMENT_END - SEGMENT_START + 1)) 个分片)"
 
-
-
 echo "🎬 HLS Zoom 脚本开始执行 - 动态版本"
 echo "📁 输入目录: $INPUT_DIR"
 echo "📁 输出目录: $OUTPUT_DIR"
@@ -141,9 +156,13 @@ echo "⏰ 开始时间: $(date '+%Y-%m-%d %H:%M:%S')"
 mkdir -p "$OUTPUT_DIR"
 mkdir -p "$TEMP_DIR"
 
-# 拷贝所有原始文件到输出目录
-echo "📋 拷贝原始 m3u8 和 ts 文件..."
-cp -r "$INPUT_DIR"/* "$OUTPUT_DIR/"
+# 拷贝所有原始文件到输出目录（仅在非增量模式下）
+if [ "$INCREMENTAL" = "0" ]; then
+  echo "📋 拷贝原始 m3u8 和 ts 文件..."
+  cp -r "$INPUT_DIR"/* "$OUTPUT_DIR/"
+else
+  echo "📁 增量模式：跳过文件拷贝，使用现有文件"
+fi
 
 # 提取分片文件名前缀（从第一个ts文件名中提取）
 FIRST_TS_FILE=$(grep "\.ts$" "$M3U8_PATH" | head -1)
@@ -273,8 +292,8 @@ echo "      if(lt(it,${ZOOM_OUT_START}), 2,"
 echo "      if(lt(it,${ZOOM_DURATION}), 2-(it-${ZOOM_OUT_START})/${ZOOM_OUT_TIME}, 1)))'"
 
 # 计算Zoom中心点的绝对像素坐标（基于原始尺寸）
-ZOOM_X=$(echo "$ZOOM_CENTER_X * $OUTPUT_WIDTH" | bc -l)
-ZOOM_Y=$(echo "$ZOOM_CENTER_Y * $OUTPUT_HEIGHT" | bc -l)
+ZOOM_X=$(echo "$ZOOM_CENTER_X * $ORIGINAL_WIDTH" | bc -l)
+ZOOM_Y=$(echo "$ZOOM_CENTER_Y * $ORIGINAL_HEIGHT" | bc -l)
 
 echo "🔍 Zoom中心点像素坐标: (${ZOOM_X}, ${ZOOM_Y})"
 
@@ -286,17 +305,17 @@ zoompan=
   z='if(lt(it,${ZOOM_IN_TIME}), 1+it/${ZOOM_IN_TIME},
      if(lt(it,${ZOOM_OUT_START}), 2,
      if(lt(it,${ZOOM_DURATION}), 2-(it-${ZOOM_OUT_START})/${ZOOM_OUT_TIME}, 1)))':
-  x='${ZOOM_X}*iw/${OUTPUT_WIDTH}-(iw/zoom/2)':
-  y='${ZOOM_Y}*ih/${OUTPUT_HEIGHT}-(ih/zoom/2)':
-  d=1:fps=$FPS:s=${PRE_SCALE_WIDTH}x$(($PRE_SCALE_WIDTH * 2234 / 3456))
+  x='${ZOOM_X}*iw/${ORIGINAL_WIDTH}-(iw/zoom/2)':
+  y='${ZOOM_Y}*ih/${ORIGINAL_HEIGHT}-(ih/zoom/2)':
+  d=1:fps=$FPS:s=${PRE_SCALE_WIDTH}x$(($PRE_SCALE_WIDTH * $ORIGINAL_HEIGHT / $ORIGINAL_WIDTH))
 [zoomed];
 
 [pre]trim=end=${REL_ZOOM_START},setpts=PTS-STARTPTS[first];
 [post]trim=start=${REL_ZOOM_END},setpts=PTS-STARTPTS[last];
 
-[first]scale=${OUTPUT_WIDTH}:${OUTPUT_HEIGHT}[first_scaled];
-[zoomed]scale=${OUTPUT_WIDTH}:${OUTPUT_HEIGHT}[zoomed_scaled];
-[last]scale=${OUTPUT_WIDTH}:${OUTPUT_HEIGHT}[last_scaled];
+[first]scale=${ORIGINAL_WIDTH}:${ORIGINAL_HEIGHT}:flags=lanczos,setsar=1:1[first_scaled];
+[zoomed]scale=${ORIGINAL_WIDTH}:${ORIGINAL_HEIGHT}:flags=lanczos,setsar=1:1[zoomed_scaled];
+[last]scale=${ORIGINAL_WIDTH}:${ORIGINAL_HEIGHT}:flags=lanczos,setsar=1:1[last_scaled];
 
 [first_scaled][zoomed_scaled][last_scaled]concat=n=3:v=1:a=0[outv]
 " -map "[outv]" -map 0:a -c:v libx264 -r $FPS -c:a copy -y "$TEMP_DIR/zoomed.ts"
