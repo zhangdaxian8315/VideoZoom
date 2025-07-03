@@ -4,10 +4,12 @@ set -e
 
 # 参数解析
 if [ $# -lt 3 ]; then
-  echo "❌ 用法: $0 <INPUT_DIR> <ZOOM_START> <ZOOM_END>"
-  echo "  INPUT_DIR   - HLS文件夹路径"
-  echo "  ZOOM_START  - Zoom开始时间(秒)"
-  echo "  ZOOM_END    - Zoom结束时间(秒)"
+  echo "❌ 用法: $0 <INPUT_DIR> <ZOOM_START> <ZOOM_END> [ZOOM_CENTER_X] [ZOOM_CENTER_Y]"
+  echo "  INPUT_DIR      - HLS文件夹路径"
+  echo "  ZOOM_START     - Zoom开始时间(秒)"
+  echo "  ZOOM_END       - Zoom结束时间(秒)"
+  echo "  ZOOM_CENTER_X  - Zoom中心点X坐标 (0.0-1.0, 默认0.5)"
+  echo "  ZOOM_CENTER_Y  - Zoom中心点Y坐标 (0.0-1.0, 默认0.5)"
   exit 1
 fi
 
@@ -16,9 +18,24 @@ INPUT_DIR="$1"
 ZOOM_START="$2"
 ZOOM_END="$3"
 
+# 可选参数 - Zoom中心点坐标
+ZOOM_CENTER_X="${4:-0.5}"
+ZOOM_CENTER_Y="${5:-0.5}"
+
 # 基本验证
 if [ ! -d "$INPUT_DIR" ]; then
   echo "❌ 错误: 输入目录不存在: $INPUT_DIR"
+  exit 1
+fi
+
+# 验证Zoom中心点坐标
+if (( $(echo "$ZOOM_CENTER_X < 0 || $ZOOM_CENTER_X > 1" | bc -l) )); then
+  echo "❌ 错误: ZOOM_CENTER_X 必须在 0.0-1.0 范围内，当前值: $ZOOM_CENTER_X"
+  exit 1
+fi
+
+if (( $(echo "$ZOOM_CENTER_Y < 0 || $ZOOM_CENTER_Y > 1" | bc -l) )); then
+  echo "❌ 错误: ZOOM_CENTER_Y 必须在 0.0-1.0 范围内，当前值: $ZOOM_CENTER_Y"
   exit 1
 fi
 
@@ -118,6 +135,7 @@ echo "🎬 HLS Zoom 脚本开始执行 - 动态版本"
 echo "📁 输入目录: $INPUT_DIR"
 echo "📁 输出目录: $OUTPUT_DIR"
 echo "⏰ Zoom时间段: ${ZOOM_START}s → ${ZOOM_END}s"
+echo "🎯 Zoom中心点: (${ZOOM_CENTER_X}, ${ZOOM_CENTER_Y})"
 echo "⏰ 开始时间: $(date '+%Y-%m-%d %H:%M:%S')"
 
 mkdir -p "$OUTPUT_DIR"
@@ -231,6 +249,7 @@ echo "📊 动态zoom参数:"
 echo "   - 原始zoom时间段: ${ZOOM_START}s → ${ZOOM_END}s"
 echo "   - 相对zoom时间段: ${REL_ZOOM_START}s → ${REL_ZOOM_END}s"  
 echo "   - Zoom持续时间: ${ZOOM_DURATION}s"
+echo "   - Zoom中心点: (${ZOOM_CENTER_X}, ${ZOOM_CENTER_Y})"
 echo "   - Zoom模式: 对称放大缩小 (1x → 2x → 1x)"
 
 # 应用 zoompan 放大动画处理（参考原始代码逻辑）
@@ -253,6 +272,12 @@ echo "   z='if(lt(it,${ZOOM_IN_TIME}), 1+it/${ZOOM_IN_TIME},"
 echo "      if(lt(it,${ZOOM_OUT_START}), 2,"
 echo "      if(lt(it,${ZOOM_DURATION}), 2-(it-${ZOOM_OUT_START})/${ZOOM_OUT_TIME}, 1)))'"
 
+# 计算Zoom中心点的绝对像素坐标（基于原始尺寸）
+ZOOM_X=$(echo "$ZOOM_CENTER_X * $OUTPUT_WIDTH" | bc -l)
+ZOOM_Y=$(echo "$ZOOM_CENTER_Y * $OUTPUT_HEIGHT" | bc -l)
+
+echo "🔍 Zoom中心点像素坐标: (${ZOOM_X}, ${ZOOM_Y})"
+
 ffmpeg -hide_banner -i "$TEMP_DIR/merged_input_fixed.ts" -filter_complex "
 [0:v]${FPS_FILTER},scale=${PRE_SCALE_WIDTH}:-1,split=3[pre][zoom][post];
 
@@ -261,8 +286,8 @@ zoompan=
   z='if(lt(it,${ZOOM_IN_TIME}), 1+it/${ZOOM_IN_TIME},
      if(lt(it,${ZOOM_OUT_START}), 2,
      if(lt(it,${ZOOM_DURATION}), 2-(it-${ZOOM_OUT_START})/${ZOOM_OUT_TIME}, 1)))':
-  x='iw/2-(iw/zoom/2)':
-  y='ih/2-(ih/zoom/2)':
+  x='${ZOOM_X}*iw/${OUTPUT_WIDTH}-(iw/zoom/2)':
+  y='${ZOOM_Y}*ih/${OUTPUT_HEIGHT}-(ih/zoom/2)':
   d=1:fps=$FPS:s=${PRE_SCALE_WIDTH}x$(($PRE_SCALE_WIDTH * 2234 / 3456))
 [zoomed];
 
