@@ -55,9 +55,9 @@ export const handler = async (event) => {
     await mkdir(outputDir, { recursive: true });
     console.log("✅ 目录创建成功");
 
-    // 1. 下载并构建本地 HLS - 启用第一步
+    // 1. 下载并构建本地 HLS - CloudFront方式
     console.log("📥 开始下载 HLS 文件...");
-    await buildLocalPlaylist(spec.manifestFileUrl, segDir, playlistPath);
+    await buildLocalPlaylist(spec.manifestFileUrl, segDir, playlistPath, spec.cloudFrontVideoCookie);
     console.log("✅ HLS 下载完成");
 
     // // 检查下载的文件
@@ -78,6 +78,7 @@ export const handler = async (event) => {
       recordingId: spec.recordingId,
       zooms: spec.zooms,
       lowQuality: spec.lowQuality === 'true' ? true : false,
+      spec,
     });
     console.log("✅ Zoom 处理完成");
     
@@ -114,7 +115,7 @@ function parsePayload(raw) {
   console.log("📋 解析后的参数:", body);
   
   const required = [
-    "recordingId", "manifestFileUrl", "callbackUrl", "zooms", "outputS3Prefix"
+    "recordingId", "manifestFileUrl", "callbackUrl", "zooms", "outputS3Prefix", "cloudFrontVideoCookie"
   ];
   
   for (const key of required) {
@@ -150,19 +151,32 @@ function parseS3Url(input) {
   }
 }
 
-// ✅ 重写后的 HLS 下载构建函数
-async function buildLocalPlaylist(manifestUrl, segDir, playlistPath) {
+// ✅ 重写后的 HLS 下载构建函数 - CloudFront方式
+async function buildLocalPlaylist(manifestUrl, segDir, playlistPath, cloudFrontVideoCookie) {
   console.log("🔗 解析 manifest URL:", manifestUrl);
 
-  const { bucket, key } = parseS3Url(manifestUrl);
-  const baseKey = key.substring(0, key.lastIndexOf('/') + 1);
+  const {
+    Policy,
+    Signature,
+    "Key-Pair-Id": KeyPairId,
+  } = cloudFrontVideoCookie;
+  const query =
+    `Policy=${encodeURIComponent(Policy)}&` +
+    `Signature=${encodeURIComponent(Signature)}&` +
+    `Key-Pair-Id=${encodeURIComponent(KeyPairId)}`;
 
-  console.log("📦 S3 信息:", { bucket, key, baseKey });
+  console.log("📦 CloudFront 签名信息:", { Policy: Policy.substring(0, 50) + "...", Signature: Signature.substring(0, 50) + "...", KeyPairId });
 
   console.log("📥 下载 m3u8 文件...");
-  const m3u8Response = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
-  const originalM3U8 = await m3u8Response.Body.transformToString();
+  const signedM3u8Url = manifestUrl + (manifestUrl.includes('?') ? '&' : '?') + query;
+  console.log("🔗 签名m3u8 URL:", signedM3u8Url);
+  const originalM3U8 = await fetch(signedM3u8Url).then((r) => r.text());
   console.log("📄 原始 m3u8 内容:", originalM3U8.substring(0, 300) + "...");
+
+  const baseUrl = manifestUrl.slice(
+    0,
+    manifestUrl.lastIndexOf("/") + 1
+  );
 
   const localLines = [];
   let segIndex = 0;
@@ -174,11 +188,13 @@ async function buildLocalPlaylist(manifestUrl, segDir, playlistPath) {
       continue;
     }
 
-    const tsKey = baseKey + line;
+    const absolute = line.startsWith("http") ? line : baseUrl + line;
+    const signed = absolute + (absolute.includes("?") ? "&" : "?") + query;
     const localName = `${String(segIndex++).padStart(5, "0")}.ts`;
 
-    console.log(`📥 下载片段 ${segIndex}: ${tsKey} -> ${localName}`);
-    await downloadFileFromS3(bucket, tsKey, join(segDir, localName));
+    console.log(`📥 下载片段 ${segIndex}: ${absolute} -> ${localName}`);
+    console.log(`🔗 签名URL: ${signed.substring(0, 100)}...`);
+    await downloadFile(signed, join(segDir, localName));
     localLines.push(localName);
   }
 
@@ -187,13 +203,13 @@ async function buildLocalPlaylist(manifestUrl, segDir, playlistPath) {
   console.log("✅ Playlist 构建完成");
 }
 
-async function downloadFileFromS3(bucket, key, dest) {
-  console.log(`📥 从 S3 下载: ${bucket}/${key} -> ${dest}`);
-  const response = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+async function downloadFile(url, dest) {
+  console.log(`📥 从 CloudFront 下载: ${url} -> ${dest}`);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`download ${url} → ${res.status}`);
   await mkdir(dirname(dest), { recursive: true });
-  const data = Buffer.from(await response.Body.transformToByteArray());
-  await writeFile(dest, data);
-  console.log(`✅ 下载完成: ${dest} (${data.length} bytes)`);
+  await writeFile(dest, Buffer.from(await res.arrayBuffer()));
+  console.log(`✅ 下载完成: ${dest}`);
 }
 
 async function uploadFolderToS3(folder, s3Prefix) {
@@ -209,7 +225,7 @@ async function uploadFolderToS3(folder, s3Prefix) {
   }
 }
 
-async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zooms, lowQuality }) {
+async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zooms, lowQuality, spec }) {
   console.log("🎬 开始多段Zoom处理...");
   console.log("📊 参数:", { zooms, lowQuality });
 
@@ -254,45 +270,23 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
       }
     }
 
-    // 2. 合并分片有重叠的zoom区间为一个大区间
-    console.log('🟡 开始分片重叠合并zoom区间...');
-    // 先为每个zoom区间计算分片索引集合
-    const zoomWithSegs = zooms.map((zoom, idx) => {
+    // 2. 计算所有zoom区间对应的分片索引范围
+    const zoomSegments = zooms.map((zoom, idx) => {
+      // 找到与zoom区间重叠的分片
       const segs = segmentInfo.filter(seg => seg.endTime > zoom.start && seg.startTime < zoom.end);
       if (segs.length === 0) throw new Error(`没有找到与Zoom区间重叠的分片: zoom-${idx}`);
-      return { ...zoom, segs, segIdxSet: new Set(segs.map(s => s.index)), idx };
+      return {
+        ...zoom,
+        segs,
+        segStart: segs[0].index,
+        segEnd: segs[segs.length - 1].index,
+        idx
+      };
     });
-    // 合并有分片交集的zoom区间
-    const mergedZooms = [];
-    for (const zoom of zoomWithSegs) {
-      if (mergedZooms.length === 0) {
-        mergedZooms.push({ ...zoom, multi: [zoom] });
-      } else {
-        const last = mergedZooms[mergedZooms.length - 1];
-        // 判断分片索引集合是否有交集
-        const hasOverlap = [...zoom.segIdxSet].some(idx => last.segIdxSet.has(idx));
-        if (hasOverlap) {
-          console.log(`🔗 分片重叠合并: zoom-${last.idx} + zoom-${zoom.idx}`);
-          // 合并分片索引集合
-          last.segIdxSet = new Set([...last.segIdxSet, ...zoom.segIdxSet]);
-          // 合并分片对象
-          last.segs = Array.from(new Set([...last.segs, ...zoom.segs])).sort((a, b) => a.index - b.index);
-          // 合并时间区间
-          last.start = Math.min(last.start, zoom.start);
-          last.end = Math.max(last.end, zoom.end);
-          // 合并zoom动画参数
-          last.multi.push(zoom);
-        } else {
-          mergedZooms.push({ ...zoom, multi: [zoom] });
-        }
-      }
-    }
-    console.log('🟢 合并后zoom区间:', mergedZooms.map(z => ({start: z.start, end: z.end, segs: z.segs.map(s=>s.index), multi: z.multi.length})));
-    // 3. 处理每个合并后zoom区间，生成zoom-i.ts（支持多段zoompan）
-    for (const [idx, zoomSeg] of mergedZooms.entries()) {
-      const { segs, start, end, multi } = zoomSeg;
-      const x = multi[0].x, y = multi[0].y; // 取第一个zoom的中心点（如需支持多中心点可扩展）
-      console.log(`🟨 处理zoom区间: [${start}, ${end}]，分片: [${segs[0].index}, ${segs[segs.length-1].index}]，多段: ${multi.length}`);
+
+    // 3. 处理每个zoom区间，生成zoom-i.ts
+    for (const zoomSeg of zoomSegments) {
+      const { segs, idx, start, end, x, y, zoom: maxZoom } = zoomSeg;
       const concatList = segs.map(seg => `file '${join(inputDir, seg.filename)}'`).join('\n');
       const concatListPath = join(tempDir, `concat_list_${idx}.txt`);
       await writeFile(concatListPath, concatList);
@@ -303,8 +297,6 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
           .inputOptions(['-f', 'concat', '-safe', '0'])
           .outputOptions(['-c', 'copy'])
           .output(mergedInputPath)
-          .on('start', cmd => console.log('[ffmpeg concat]', cmd))
-          .on('stderr', line => console.log('[ffmpeg]', line))
           .on('end', resolve)
           .on('error', reject)
           .run();
@@ -317,8 +309,6 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
           .inputOptions(['-fflags', '+genpts'])
           .outputOptions(['-c', 'copy', '-avoid_negative_ts', 'make_zero', '-muxdelay', '0', '-muxpreload', '0'])
           .output(mergedInputFixedPath)
-          .on('start', cmd => console.log('[ffmpeg genpts]', cmd))
-          .on('stderr', line => console.log('[ffmpeg]', line))
           .on('end', resolve)
           .on('error', reject)
           .run();
@@ -338,45 +328,23 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
         width = origWidth;
         height = origHeight;
       }
-      // 多段zoompan参数
-      let zoompanExpr = '';
-      if (multi.length > 1) {
-        let exprs = [];
-        for (const z of multi) {
-          const zoomInTime = 2.0;
-          const zoomOutTime = 2.0;
-          const zoomDuration = z.end - z.start;
-          const zoomOutStart = zoomDuration - zoomOutTime;
-          const relZoomStart = z.start - segs[0].startTime;
-          const relZoomEnd = z.end - segs[0].startTime;
-          const zoomFormula = `if(lt(it,${zoomInTime}), 1+it/${zoomInTime}, if(lt(it,${zoomOutStart}), ${z.zoom}, if(lt(it,${zoomDuration}), ${z.zoom}-(it-${zoomOutStart})/${zoomOutTime}, 1)))`;
-          exprs.push(`between(it,${relZoomStart},${relZoomEnd})*(${zoomFormula})`);
-          console.log(`  ➡️ 多段zoom: [${z.start}, ${z.end}], x=${z.x}, y=${z.y}, zoom=${z.zoom}, rel=[${relZoomStart}, ${relZoomEnd}]`);
-        }
-        zoompanExpr = exprs.join('+');
-        console.log('  ➡️ 多段zoompan表达式:', zoompanExpr);
-      } else {
-        // 单段zoom动画
-        const z = multi[0];
-        const zoomInTime = 2.0;
-        const zoomOutTime = 2.0;
-        const zoomDuration = z.end - z.start;
-        const zoomOutStart = zoomDuration - zoomOutTime;
-        const relZoomStart = z.start - segs[0].startTime;
-        const relZoomEnd = z.end - segs[0].startTime;
-        zoompanExpr = `if(lt(it,${zoomInTime}), 1+it/${zoomInTime}, if(lt(it,${zoomOutStart}), ${z.zoom}, if(lt(it,${zoomDuration}), ${z.zoom}-(it-${zoomOutStart})/${zoomOutTime}, 1)))`;
-        console.log(`  ➡️ 单段zoom: [${z.start}, ${z.end}], x=${z.x}, y=${z.y}, zoom=${z.zoom}, rel=[${relZoomStart}, ${relZoomEnd}]`);
-        console.log('  ➡️ zoompan表达式:', zoompanExpr);
-      }
+      // zoom动画参数
+      const zoomInTime = 2.0;
+      const zoomOutTime = 2.0;
+      const zoomDuration = end - start;
+      const zoomOutStart = zoomDuration - zoomOutTime;
+      const relZoomStart = start - segs[0].startTime;
+      const relZoomEnd = end - segs[0].startTime;
+      const zoomFormula = `if(lt(it,${zoomInTime}), 1+it/${zoomInTime}, if(lt(it,${zoomOutStart}), ${maxZoom}, if(lt(it,${zoomDuration}), ${maxZoom}-(it-${zoomOutStart})/${zoomOutTime}, 1)))`;
       const filterComplex = [
         `[0:v]fps=${fps},scale=${preScaleWidth}:-1,split=3[pre][zoom][post];`,
-        `[zoom]trim=start=${start - segs[0].startTime}:end=${end - segs[0].startTime},setpts=PTS-STARTPTS,`,
-        `zoompan=z='${zoompanExpr}':`,
+        `[zoom]trim=start=${relZoomStart}:end=${relZoomEnd},setpts=PTS-STARTPTS,`,
+        `zoompan=z='${zoomFormula}':`,
         `x='${x}*iw-iw/zoom/2':`,
         `y='${y}*ih-ih/zoom/2':`,
         `d=1:fps=${fps}:s=${preScaleWidth}x${Math.floor(preScaleWidth * origHeight / origWidth)}[zoomed];`,
-        `[pre]trim=end=${start - segs[0].startTime},setpts=PTS-STARTPTS[first];`,
-        `[post]trim=start=${end - segs[0].startTime},setpts=PTS-STARTPTS[last];`,
+        `[pre]trim=end=${relZoomStart},setpts=PTS-STARTPTS[first];`,
+        `[post]trim=start=${relZoomEnd},setpts=PTS-STARTPTS[last];`,
         `[first]scale=${width}:${height}:flags=lanczos,setsar=1:1[first_scaled];`,
         `[zoomed]scale=${width}:${height}:flags=lanczos,setsar=1:1[zoomed_scaled];`,
         `[last]scale=${width}:${height}:flags=lanczos,setsar=1:1[last_scaled];`,
@@ -388,8 +356,6 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
           .input(mergedInputFixedPath)
           .outputOptions(['-filter_complex', filterComplex, '-map', '[outv]', '-map', '0:a', '-c:v', 'libx264', '-r', fps.toString(), '-c:a', 'copy'])
           .output(zoomedPath)
-          .on('start', cmd => console.log('[ffmpeg zoom]', cmd))
-          .on('stderr', line => console.log('[ffmpeg]', line))
           .on('end', resolve)
           .on('error', reject)
           .run();
@@ -409,7 +375,7 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
     let zoomIdx = 0;
     while (segmentIdx < segmentInfo.length) {
       // 检查当前分片是否在某个zoom区间
-      const zoom = mergedZooms[zoomIdx];
+      const zoom = zoomSegments[zoomIdx];
       if (zoom && segmentIdx === zoom.segStart) {
         // 插入zoom分片
         const zoomedPath = `zoom-${zoomIdx}.ts`;
@@ -431,6 +397,16 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
     newLines.push('#EXT-X-ENDLIST');
     await writeFile(outputPlaylistPath, newLines.join('\n'));
     console.log('✅ 多段Zoom处理完成！');
+
+    // 自动导出MP4
+    const outputMp4 = join(outputDir, `${recordingId}.mp4`);
+    await runFfmpeg(outputPlaylistPath, outputMp4);
+    console.log('✅ MP4导出完成:', outputMp4);
+    
+    // 上传MP4到S3
+    console.log('📤 开始上传MP4到S3...');
+    await uploadMp4ToS3(outputMp4, spec);
+    console.log('✅ MP4上传完成:', `${spec.outputS3Prefix}/${spec.recordingId}.mp4`);
   } finally {
     try { await rm(tempDir, { recursive: true, force: true }); } catch {}
   }
@@ -466,6 +442,39 @@ function getVideoInfo(filePath) {
       }
     });
   });
+}
+
+// 辅助函数：导出MP4
+async function runFfmpeg(inputM3U8, outputMp4) {
+  return new Promise((resolve, reject) => {
+    ffmpeg(inputM3U8)
+      .outputOptions([
+        "-c copy",
+        "-movflags +faststart",
+        "-threads 1",
+        "-max_alloc 268435456",
+        "-hide_banner",
+        "-loglevel error",
+      ])
+      .on("start", (cmd) => console.log("[ffmpeg mp4]", cmd))
+      .on("error", reject)
+      .on("end", resolve)
+      .save(outputMp4);
+  });
+}
+
+// 辅助函数：上传MP4到S3
+async function uploadMp4ToS3(path, spec) {
+  const data = await readFile(path);
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: `${spec.outputS3Prefix}/${spec.recordingId}.mp4`,
+      Body: data,
+      ContentType: "video/mp4",
+      ContentDisposition: `attachment; filename="${spec.recordingId}.mp4"`,
+    })
+  );
 }
 
 const ok = (body) => ({ statusCode: 200, body: JSON.stringify(body) });
