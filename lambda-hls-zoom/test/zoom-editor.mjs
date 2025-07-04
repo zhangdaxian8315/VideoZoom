@@ -460,6 +460,27 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
     const segmentEnd = targetSegments[targetSegments.length - 1].index;
     
     console.log(`🎯 目标分片范围: ${segmentStart} 到 ${segmentEnd} (共 ${targetSegments.length} 个分片)`);
+    
+    // 打印每个目标分片的实际时长
+    console.log("📊 目标分片实际时长:");
+    for (const seg of targetSegments) {
+      const segPath = join(inputDir, seg.filename);
+      const info = await getVideoInfo(segPath);
+      console.log(`  ${seg.filename}: ${info.duration}s`);
+    }
+    
+    // 详细分片信息日志
+    console.log("📊 所有分片信息:");
+    segmentInfo.forEach(seg => {
+      console.log(`  分片${seg.index}: ${seg.startTime}s-${seg.endTime}s (${seg.duration}s) - ${seg.filename}`);
+    });
+    
+    console.log("🎯 目标分片详细信息:");
+    targetSegments.forEach(seg => {
+      console.log(`  目标分片${seg.index}: ${seg.startTime}s-${seg.endTime}s (${seg.duration}s) - ${seg.filename}`);
+    });
+    
+    console.log(`🎯 Zoom时间段: ${zoomStart}s - ${zoomEnd}s`);
 
     // 3. 合并目标分片
     console.log("🔗 合并目标分片...");
@@ -469,6 +490,9 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
     
     const concatListPath = join(tempDir, 'concat_list.txt');
     await writeFile(concatListPath, concatList);
+    
+    console.log("📄 Concat文件内容:");
+    console.log(concatList);
 
     const mergedInputPath = join(tempDir, 'merged_input.ts');
     await new Promise((resolve, reject) => {
@@ -507,7 +531,7 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
     const width = videoInfo.width || 1920;
     const height = videoInfo.height || 1080;
     
-    console.log(`📊 检测到参数: ${width}x${height}, ${fps}fps`);
+    console.log(`📊 合并后文件信息: ${videoInfo.duration}s, ${width}x${height}, ${fps}fps`);
 
     // 6. 计算相对时间
     const firstSegmentStartTime = targetSegments[0].startTime;
@@ -516,12 +540,19 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
     const zoomDuration = relZoomEnd - relZoomStart;
     
     console.log(`📊 时间参数: 相对zoom时间段 ${relZoomStart}s → ${relZoomEnd}s, 持续 ${zoomDuration}s`);
+    console.log(`📊 时间计算详情:`);
+    console.log(`  - 第一个目标分片开始时间: ${firstSegmentStartTime}s`);
+    console.log(`  - 原始zoom开始时间: ${zoomStart}s`);
+    console.log(`  - 原始zoom结束时间: ${zoomEnd}s`);
+    console.log(`  - 相对zoom开始时间: ${relZoomStart}s`);
+    console.log(`  - 相对zoom结束时间: ${relZoomEnd}s`);
+    console.log(`  - Zoom持续时间: ${zoomDuration}s`);
 
     // 7. 设置zoom参数
     const zoomInTime = 2.0;
     const zoomOutTime = 2.0;
     const zoomOutStart = zoomDuration - zoomOutTime;
-    const preScaleWidth = 8000;
+    const preScaleWidth = 4000;
 
     // 8. 执行zoom处理
     console.log("🎞️ 执行zoom处理...");
@@ -559,6 +590,11 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
     // 9. 检测zoom文件时长
     const zoomFileInfo = await getVideoInfo(zoomedPath);
     const zoomFileDuration = zoomFileInfo.duration || zoomDuration;
+    
+    console.log(`📊 Zoom文件信息:`);
+    console.log(`  - 期望时长: ${zoomDuration}s`);
+    console.log(`  - 实际时长: ${zoomFileInfo.duration}s`);
+    console.log(`  - 使用时长: ${zoomFileDuration}s`);
 
     // 10. 删除原始目标分片并复制zoom文件
     console.log("🗑️ 删除原始目标分片...");
