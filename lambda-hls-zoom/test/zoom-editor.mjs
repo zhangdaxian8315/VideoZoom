@@ -404,6 +404,16 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
   await mkdir(tempDir, { recursive: true });
 
   try {
+    // 0. 拷贝所有原始文件到输出目录
+    console.log("📋 拷贝原始文件到输出目录...");
+    const inputFiles = await readdir(inputDir);
+    for (const file of inputFiles) {
+      const sourcePath = join(inputDir, file);
+      const destPath = join(outputDir, file);
+      await cp(sourcePath, destPath);
+      console.log(`📋 已拷贝: ${file}`);
+    }
+    console.log("✅ 原始文件拷贝完成");
     // 1. 解析M3U8播放列表，提取分片信息
     console.log("📋 解析M3U8播放列表...");
     const playlistContent = await readFile(playlistPath, 'utf8');
@@ -467,6 +477,8 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
         .inputOptions(['-f', 'concat', '-safe', '0'])
         .outputOptions(['-c', 'copy'])
         .output(mergedInputPath)
+        .on('start', cmd => console.log('[ffmpeg concat]', cmd))
+        .on('stderr', line => console.log('[ffmpeg]', line))
         .on('end', resolve)
         .on('error', reject)
         .run();
@@ -481,6 +493,8 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
         .inputOptions(['-fflags', '+genpts'])
         .outputOptions(['-c', 'copy', '-avoid_negative_ts', 'make_zero', '-muxdelay', '0', '-muxpreload', '0'])
         .output(mergedInputFixedPath)
+        .on('start', cmd => console.log('[ffmpeg genpts]', cmd))
+        .on('stderr', line => console.log('[ffmpeg]', line))
         .on('end', resolve)
         .on('error', reject)
         .run();
@@ -535,6 +549,8 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
         .input(mergedInputFixedPath)
         .outputOptions(['-filter_complex', filterComplex, '-map', '[outv]', '-map', '0:a', '-c:v', 'libx264', '-r', fps.toString(), '-c:a', 'copy'])
         .output(zoomedPath)
+        .on('start', cmd => console.log('[ffmpeg zoom]', cmd))
+        .on('stderr', line => console.log('[ffmpeg]', line))
         .on('end', resolve)
         .on('error', reject)
         .run();
