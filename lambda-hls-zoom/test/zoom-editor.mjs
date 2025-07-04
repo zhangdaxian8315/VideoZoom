@@ -76,10 +76,8 @@ export const handler = async (event) => {
       outputDir,
       playlistPath,
       recordingId: spec.recordingId,
-      zoomStart: parseFloat(spec.zoomStart),
-      zoomEnd: parseFloat(spec.zoomEnd),
-      zoomCenterX: parseFloat(spec.zoomCenterX ?? 0.5),
-      zoomCenterY: parseFloat(spec.zoomCenterY ?? 0.5),
+      zooms: spec.zooms,
+      lowQuality: spec.lowQuality === 'true' ? true : false,
     });
     console.log("✅ Zoom 处理完成");
     
@@ -116,7 +114,7 @@ function parsePayload(raw) {
   console.log("📋 解析后的参数:", body);
   
   const required = [
-    "recordingId", "manifestFileUrl", "callbackUrl", "zoomStart", "zoomEnd", "outputS3Prefix"
+    "recordingId", "manifestFileUrl", "callbackUrl", "zooms", "outputS3Prefix"
   ];
   
   for (const key of required) {
@@ -211,194 +209,9 @@ async function uploadFolderToS3(folder, s3Prefix) {
   }
 }
 
-// async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoomStart, zoomEnd, zoomCenterX, zoomCenterY }) {
-//   const inputM3U8 = playlistPath;
-//   const outputZoomedTS = join(outputDir, 'zoomed.ts');
-//   const outputM3U8 = join(outputDir, 'playlist.m3u8');
-
-//   const fps = 30;
-//   const zoomInTime = 2.0;
-//   const zoomOutTime = 2.0;
-//   const zoomDuration = zoomEnd - zoomStart;
-//   const zoomOutStart = zoomDuration - zoomOutTime;
-
-//   const zoomFormula = `if(lt(it,${zoomInTime}), 1+it/${zoomInTime}, if(lt(it,${zoomOutStart}), 2, if(lt(it,${zoomDuration}), 2-(it-${zoomOutStart})/${zoomOutTime}, 1)))`;
-
-//   return new Promise((resolve, reject) => {
-//     ffmpeg(inputM3U8)
-//       .inputOptions('-fflags +genpts')
-//       .outputOptions(
-//         '-filter_complex',
-//         `fps=${fps},zoompan=z='${zoomFormula}':x='${zoomCenterX}*iw-(iw/zoom/2)':y='${zoomCenterY}*ih-(ih/zoom/2)':d=1`
-//       )
-//       .videoCodec('libx264')
-//       .audioCodec('aac')
-//       .on('start', cmd => console.log('[ffmpeg zoom]', cmd))
-//       .on('stderr', line => console.log('[ffmpeg]', line))
-//       .on('end', async () => {
-//         await writeFile(outputM3U8, `#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:10\n#EXTINF:${zoomDuration},\nzoomed.ts\n#EXT-X-ENDLIST`);
-//         resolve();
-//       })
-//       .on('error', reject)
-//       .save(outputZoomedTS);
-//   });
-// }
-
-import { promises as fs } from 'fs';
-import ffprobe from 'fluent-ffmpeg';
-import { execSync } from 'child_process';
-
-// async function processZoom({
-//   inputDir,
-//   outputDir,
-//   playlistPath,
-//   recordingId,
-//   zoomStart,
-//   zoomEnd,
-//   zoomCenterX,
-//   zoomCenterY
-// }) {
-//   const m3u8Text = await fs.readFile(playlistPath, 'utf-8');
-//   const lines = m3u8Text.split('\n');
-
-//   const segments = [];
-//   let i = 0, currentTime = 0;
-//   while (i < lines.length) {
-//     if (lines[i].startsWith('#EXTINF:')) {
-//       const duration = parseFloat(lines[i].split(':')[1]);
-//       const filename = lines[i + 1];
-//       const start = currentTime;
-//       const end = currentTime + duration;
-//       segments.push({ index: segments.length, filename, duration, start, end });
-//       currentTime = end;
-//       i += 2;
-//     } else {
-//       i++;
-//     }
-//   }
-
-//   // 找到与 Zoom 时间段重叠的分片
-//   const selected = segments.filter(seg =>
-//     seg.end > zoomStart && seg.start < zoomEnd
-//   );
-
-//   if (selected.length === 0) {
-//     throw new Error('❌ No overlapping segments found for zoom.');
-//   }
-
-//   const firstIdx = selected[0].index;
-//   const lastIdx = selected[selected.length - 1].index;
-//   const relZoomStart = zoomStart - selected[0].start;
-//   const relZoomEnd = zoomEnd - selected[0].start;
-//   const zoomDuration = relZoomEnd - relZoomStart;
-
-//   // 合并 TS 文件列表
-//   const concatListPath = join(outputDir, 'concat.txt');
-//   const concatList = selected.map(seg => `file '${join(inputDir, seg.filename)}'`).join('\n');
-//   await fs.writeFile(concatListPath, concatList);
-
-//   const mergedTS = join(outputDir, 'merged.ts');
-//   execSync(`ffmpeg -f concat -safe 0 -i ${concatListPath} -c copy ${mergedTS} -y`);
-
-//   // 检测视频分辨率与帧率
-//   const widthStr = execSync(
-//     `ffprobe -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 ${mergedTS}`,
-//     { encoding: 'utf-8' }
-//   );
-  
-//   const heightStr = execSync(
-//     `ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 ${mergedTS}`,
-//     { encoding: 'utf-8' }
-//   );
-  
-//   const fpsStr = execSync(
-//     `ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of default=noprint_wrappers=1:nokey=1 ${mergedTS}`,
-//     { encoding: 'utf-8' }
-//   );
-//   const [num, den] = fpsStr.trim().split('/').map(Number);
-//   const fps = +(num / den).toFixed(2);
-
-//   // Zoom 动画
-//   const zoomInTime = 2.0, zoomOutTime = 2.0;
-//   const zoomOutStart = zoomDuration - zoomOutTime;
-//   const zoomFormula = `if(lt(it,${zoomInTime}), 1+it/${zoomInTime}, if(lt(it,${zoomOutStart}), 2, if(lt(it,${zoomDuration}), 2-(it-${zoomOutStart})/${zoomOutTime}, 1)))`;
-//   const zoomX = `${zoomCenterX}*iw-(iw/zoom/2)`;
-//   const zoomY = `${zoomCenterY}*ih-(ih/zoom/2)`;
-
-//   const zoomedTS = join(outputDir, 'zoomed.ts');
-
-// // 📝 添加日志：确认源文件存在
-// if (!existsSync(mergedTS)) {
-//   throw new Error(`❌ 找不到合并后的 TS 文件: ${mergedTS}`);
-// }
-
-// console.log(`🔧 准备执行 FFmpeg Zoom 转码...`);
-// console.log(`📥 输入文件: ${mergedTS}`);
-// console.log(`📤 输出文件: ${zoomedTS}`);
-// console.log(`📐 分辨率: ${widthStr.trim()}x${heightStr.trim()}, FPS: ${fpsStr.trim()}`);
-// console.log(`📍 注目点: (${zoomCenterX}, ${zoomCenterY})`);
-// console.log(`🎞️ 变焦动画时长: ${zoomDuration.toFixed(2)} 秒`);
-
-// await new Promise((resolve, reject) => {
-//   const stderrLog = [];
-
-//   ffmpeg(mergedTS)
-//     .videoFilters(`fps=${fps},zoompan=z='${zoomFormula}':x='${zoomX}':y='${zoomY}':d=1`)
-//     .videoCodec('libx264')
-//     .audioCodec('aac')
-//     .outputOptions('-preset veryfast')
-//     .on('start', cmd => {
-//       console.log('[ffmpeg zoom command]', cmd);
-//     })
-//     .on('stderr', line => {
-//       stderrLog.push(line);
-//       console.log('[ffmpeg]', line);
-//     })
-//     .on('end', () => {
-//       console.log('✅ FFmpeg 转码成功');
-//       resolve();
-//     })
-//     .on('error', err => {
-//       console.error('❌ FFmpeg 转码失败:', err.message);
-//       console.error('❗ stderr 输出如下:');
-//       console.error(stderrLog.join('\n'));
-//       reject(err);
-//     })
-//     .save(zoomedTS);
-// });
-
-
-//   // 替换 playlist.m3u8 中的对应分片为 zoomed.ts
-//   const newPlaylistLines = [];
-//   let segmentIndex = 0;
-//   for (let i = 0; i < lines.length; i++) {
-//     if (lines[i].startsWith('#EXTINF:')) {
-//       if (segmentIndex === firstIdx) {
-//         newPlaylistLines.push(`#EXTINF:${zoomDuration.toFixed(3)},`);
-//         newPlaylistLines.push('zoomed.ts');
-//         i++; // skip original ts line
-//         while (segmentIndex < lastIdx) {
-//           i += 2;
-//           segmentIndex++;
-//         }
-//       } else {
-//         newPlaylistLines.push(lines[i]);
-//         newPlaylistLines.push(lines[i + 1]);
-//         i++;
-//       }
-//       segmentIndex++;
-//     } else {
-//       newPlaylistLines.push(lines[i]);
-//     }
-//   }
-
-//   await fs.writeFile(join(outputDir, 'playlist.m3u8'), newPlaylistLines.join('\n'));
-//   console.log('✅ Zoom process complete.');
-// }
-
-async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoomStart, zoomEnd, zoomCenterX, zoomCenterY }) {
-  console.log("🎬 开始 Zoom 处理...");
-  console.log("📊 参数:", { zoomStart, zoomEnd, zoomCenterX, zoomCenterY });
+async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zooms, lowQuality }) {
+  console.log("🎬 开始多段Zoom处理...");
+  console.log("📊 参数:", { zooms, lowQuality });
 
   const tempDir = `/tmp/zoom_${recordingId}`;
   await mkdir(tempDir, { recursive: true });
@@ -411,18 +224,15 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
       const sourcePath = join(inputDir, file);
       const destPath = join(outputDir, file);
       await cp(sourcePath, destPath);
-      console.log(`📋 已拷贝: ${file}`);
     }
     console.log("✅ 原始文件拷贝完成");
+
     // 1. 解析M3U8播放列表，提取分片信息
-    console.log("📋 解析M3U8播放列表...");
     const playlistContent = await readFile(playlistPath, 'utf8');
     const lines = playlistContent.split('\n');
-    
     const segmentInfo = [];
     let currentTime = 0;
     let segmentIndex = 0;
-    
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
       if (line.startsWith('#EXTINF:')) {
@@ -431,7 +241,6 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
         if (nextLine && nextLine.endsWith('.ts')) {
           const startTime = currentTime;
           const endTime = currentTime + duration;
-          
           segmentInfo.push({
             index: segmentIndex,
             filename: nextLine,
@@ -439,194 +248,193 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
             startTime,
             endTime
           });
-          
           currentTime = endTime;
           segmentIndex++;
         }
       }
     }
 
-    // 2. 找到与zoom时间段重叠的分片
-    console.log("🔍 查找目标分片...");
-    const targetSegments = segmentInfo.filter(seg => 
-      seg.endTime > zoomStart && seg.startTime < zoomEnd
-    );
-
-    if (targetSegments.length === 0) {
-      throw new Error("没有找到与Zoom时间段重叠的分片");
-    }
-
-    const segmentStart = targetSegments[0].index;
-    const segmentEnd = targetSegments[targetSegments.length - 1].index;
-    
-    console.log(`🎯 目标分片范围: ${segmentStart} 到 ${segmentEnd} (共 ${targetSegments.length} 个分片)`);
-    
-    // 打印每个目标分片的实际时长
-    console.log("📊 目标分片实际时长:");
-    for (const seg of targetSegments) {
-      const segPath = join(inputDir, seg.filename);
-      const info = await getVideoInfo(segPath);
-      console.log(`  ${seg.filename}: ${info.duration}s`);
-    }
-    
-    // 详细分片信息日志
-    console.log("📊 所有分片信息:");
-    segmentInfo.forEach(seg => {
-      console.log(`  分片${seg.index}: ${seg.startTime}s-${seg.endTime}s (${seg.duration}s) - ${seg.filename}`);
+    // 2. 合并分片有重叠的zoom区间为一个大区间
+    console.log('🟡 开始分片重叠合并zoom区间...');
+    // 先为每个zoom区间计算分片索引集合
+    const zoomWithSegs = zooms.map((zoom, idx) => {
+      const segs = segmentInfo.filter(seg => seg.endTime > zoom.start && seg.startTime < zoom.end);
+      if (segs.length === 0) throw new Error(`没有找到与Zoom区间重叠的分片: zoom-${idx}`);
+      return { ...zoom, segs, segIdxSet: new Set(segs.map(s => s.index)), idx };
     });
-    
-    console.log("🎯 目标分片详细信息:");
-    targetSegments.forEach(seg => {
-      console.log(`  目标分片${seg.index}: ${seg.startTime}s-${seg.endTime}s (${seg.duration}s) - ${seg.filename}`);
-    });
-    
-    console.log(`🎯 Zoom时间段: ${zoomStart}s - ${zoomEnd}s`);
-
-    // 3. 合并目标分片
-    console.log("🔗 合并目标分片...");
-    const concatList = targetSegments.map(seg => 
-      `file '${join(inputDir, seg.filename)}'`
-    ).join('\n');
-    
-    const concatListPath = join(tempDir, 'concat_list.txt');
-    await writeFile(concatListPath, concatList);
-    
-    console.log("📄 Concat文件内容:");
-    console.log(concatList);
-
-    const mergedInputPath = join(tempDir, 'merged_input.ts');
-    await new Promise((resolve, reject) => {
-      ffmpeg()
-        .input(concatListPath)
-        .inputOptions(['-f', 'concat', '-safe', '0'])
-        .outputOptions(['-c', 'copy'])
-        .output(mergedInputPath)
-        .on('start', cmd => console.log('[ffmpeg concat]', cmd))
-        .on('stderr', line => console.log('[ffmpeg]', line))
-        .on('end', resolve)
-        .on('error', reject)
-        .run();
-    });
-
-    // 4. 调整时间戳从0开始
-    console.log("🔄 调整时间戳...");
-    const mergedInputFixedPath = join(tempDir, 'merged_input_fixed.ts');
-    await new Promise((resolve, reject) => {
-      ffmpeg()
-        .input(mergedInputPath)
-        .inputOptions(['-fflags', '+genpts'])
-        .outputOptions(['-c', 'copy', '-avoid_negative_ts', 'make_zero', '-muxdelay', '0', '-muxpreload', '0'])
-        .output(mergedInputFixedPath)
-        .on('start', cmd => console.log('[ffmpeg genpts]', cmd))
-        .on('stderr', line => console.log('[ffmpeg]', line))
-        .on('end', resolve)
-        .on('error', reject)
-        .run();
-    });
-
-    // 5. 检测视频参数
-    console.log("🔍 检测视频参数...");
-    const videoInfo = await getVideoInfo(mergedInputFixedPath);
-    const fps = videoInfo.fps || 30;
-    const width = videoInfo.width || 1920;
-    const height = videoInfo.height || 1080;
-    
-    console.log(`📊 合并后文件信息: ${videoInfo.duration}s, ${width}x${height}, ${fps}fps`);
-
-    // 6. 计算相对时间
-    const firstSegmentStartTime = targetSegments[0].startTime;
-    const relZoomStart = zoomStart - firstSegmentStartTime;
-    const relZoomEnd = zoomEnd - firstSegmentStartTime;
-    const zoomDuration = relZoomEnd - relZoomStart;
-    
-    console.log(`📊 时间参数: 相对zoom时间段 ${relZoomStart}s → ${relZoomEnd}s, 持续 ${zoomDuration}s`);
-    console.log(`📊 时间计算详情:`);
-    console.log(`  - 第一个目标分片开始时间: ${firstSegmentStartTime}s`);
-    console.log(`  - 原始zoom开始时间: ${zoomStart}s`);
-    console.log(`  - 原始zoom结束时间: ${zoomEnd}s`);
-    console.log(`  - 相对zoom开始时间: ${relZoomStart}s`);
-    console.log(`  - 相对zoom结束时间: ${relZoomEnd}s`);
-    console.log(`  - Zoom持续时间: ${zoomDuration}s`);
-
-    // 7. 设置zoom参数
-    const zoomInTime = 2.0;
-    const zoomOutTime = 2.0;
-    const zoomOutStart = zoomDuration - zoomOutTime;
-    const preScaleWidth = 4000;
-
-    // 8. 执行zoom处理
-    console.log("🎞️ 执行zoom处理...");
-    const zoomedPath = join(tempDir, 'zoomed.ts');
-    
-    const zoomFormula = `if(lt(it,${zoomInTime}), 1+it/${zoomInTime}, if(lt(it,${zoomOutStart}), 2, if(lt(it,${zoomDuration}), 2-(it-${zoomOutStart})/${zoomOutTime}, 1)))`;
-    
-    const filterComplex = [
-      `[0:v]fps=${fps},scale=${preScaleWidth}:-1,split=3[pre][zoom][post];`,
-      `[zoom]trim=start=${relZoomStart}:end=${relZoomEnd},setpts=PTS-STARTPTS,`,
-      `zoompan=z='${zoomFormula}':`,
-      `x='${zoomCenterX}*iw-iw/zoom/2':`,
-      `y='${zoomCenterY}*ih-ih/zoom/2':`,
-      `d=1:fps=${fps}:s=${preScaleWidth}x${Math.floor(preScaleWidth * height / width)}[zoomed];`,
-      `[pre]trim=end=${relZoomStart},setpts=PTS-STARTPTS[first];`,
-      `[post]trim=start=${relZoomEnd},setpts=PTS-STARTPTS[last];`,
-      `[first]scale=${width}:${height}:flags=lanczos,setsar=1:1[first_scaled];`,
-      `[zoomed]scale=${width}:${height}:flags=lanczos,setsar=1:1[zoomed_scaled];`,
-      `[last]scale=${width}:${height}:flags=lanczos,setsar=1:1[last_scaled];`,
-      `[first_scaled][zoomed_scaled][last_scaled]concat=n=3:v=1:a=0[outv]`
-    ].join('');
-
-    await new Promise((resolve, reject) => {
-      ffmpeg()
-        .input(mergedInputFixedPath)
-        .outputOptions(['-filter_complex', filterComplex, '-map', '[outv]', '-map', '0:a', '-c:v', 'libx264', '-r', fps.toString(), '-c:a', 'copy'])
-        .output(zoomedPath)
-        .on('start', cmd => console.log('[ffmpeg zoom]', cmd))
-        .on('stderr', line => console.log('[ffmpeg]', line))
-        .on('end', resolve)
-        .on('error', reject)
-        .run();
-    });
-
-    // 9. 检测zoom文件时长
-    const zoomFileInfo = await getVideoInfo(zoomedPath);
-    const zoomFileDuration = zoomFileInfo.duration || zoomDuration;
-    
-    console.log(`📊 Zoom文件信息:`);
-    console.log(`  - 期望时长: ${zoomDuration}s`);
-    console.log(`  - 实际时长: ${zoomFileInfo.duration}s`);
-    console.log(`  - 使用时长: ${zoomFileDuration}s`);
-
-    // 10. 删除原始目标分片并复制zoom文件
-    console.log("🗑️ 删除原始目标分片...");
-    for (const seg of targetSegments) {
-      const originalPath = join(outputDir, seg.filename);
-      try {
-        await rm(originalPath);
-      } catch (e) {
-        console.log(`⚠️ 删除文件失败: ${seg.filename}`);
+    // 合并有分片交集的zoom区间
+    const mergedZooms = [];
+    for (const zoom of zoomWithSegs) {
+      if (mergedZooms.length === 0) {
+        mergedZooms.push({ ...zoom, multi: [zoom] });
+      } else {
+        const last = mergedZooms[mergedZooms.length - 1];
+        // 判断分片索引集合是否有交集
+        const hasOverlap = [...zoom.segIdxSet].some(idx => last.segIdxSet.has(idx));
+        if (hasOverlap) {
+          console.log(`🔗 分片重叠合并: zoom-${last.idx} + zoom-${zoom.idx}`);
+          // 合并分片索引集合
+          last.segIdxSet = new Set([...last.segIdxSet, ...zoom.segIdxSet]);
+          // 合并分片对象
+          last.segs = Array.from(new Set([...last.segs, ...zoom.segs])).sort((a, b) => a.index - b.index);
+          // 合并时间区间
+          last.start = Math.min(last.start, zoom.start);
+          last.end = Math.max(last.end, zoom.end);
+          // 合并zoom动画参数
+          last.multi.push(zoom);
+        } else {
+          mergedZooms.push({ ...zoom, multi: [zoom] });
+        }
       }
     }
-
-    console.log("📋 复制zoom文件...");
-    const outputZoomedPath = join(outputDir, 'zoomed.ts');
-    await cp(zoomedPath, outputZoomedPath);
-
-    // 11. 更新playlist.m3u8
-    console.log("📝 更新playlist.m3u8...");
-    await updatePlaylist(inputDir, outputDir, segmentStart, segmentEnd, zoomFileDuration);
-
-    console.log("✅ Zoom处理完成");
-  } finally {
-    // 清理临时文件
-    try {
-      await rm(tempDir, { recursive: true, force: true });
-    } catch (e) {
-      console.log("⚠️ 清理临时目录失败:", e.message);
+    console.log('🟢 合并后zoom区间:', mergedZooms.map(z => ({start: z.start, end: z.end, segs: z.segs.map(s=>s.index), multi: z.multi.length})));
+    // 3. 处理每个合并后zoom区间，生成zoom-i.ts（支持多段zoompan）
+    for (const [idx, zoomSeg] of mergedZooms.entries()) {
+      const { segs, start, end, multi } = zoomSeg;
+      const x = multi[0].x, y = multi[0].y; // 取第一个zoom的中心点（如需支持多中心点可扩展）
+      console.log(`🟨 处理zoom区间: [${start}, ${end}]，分片: [${segs[0].index}, ${segs[segs.length-1].index}]，多段: ${multi.length}`);
+      const concatList = segs.map(seg => `file '${join(inputDir, seg.filename)}'`).join('\n');
+      const concatListPath = join(tempDir, `concat_list_${idx}.txt`);
+      await writeFile(concatListPath, concatList);
+      const mergedInputPath = join(tempDir, `merged_input_${idx}.ts`);
+      await new Promise((resolve, reject) => {
+        ffmpeg()
+          .input(concatListPath)
+          .inputOptions(['-f', 'concat', '-safe', '0'])
+          .outputOptions(['-c', 'copy'])
+          .output(mergedInputPath)
+          .on('start', cmd => console.log('[ffmpeg concat]', cmd))
+          .on('stderr', line => console.log('[ffmpeg]', line))
+          .on('end', resolve)
+          .on('error', reject)
+          .run();
+      });
+      // 时间戳重置
+      const mergedInputFixedPath = join(tempDir, `merged_input_fixed_${idx}.ts`);
+      await new Promise((resolve, reject) => {
+        ffmpeg()
+          .input(mergedInputPath)
+          .inputOptions(['-fflags', '+genpts'])
+          .outputOptions(['-c', 'copy', '-avoid_negative_ts', 'make_zero', '-muxdelay', '0', '-muxpreload', '0'])
+          .output(mergedInputFixedPath)
+          .on('start', cmd => console.log('[ffmpeg genpts]', cmd))
+          .on('stderr', line => console.log('[ffmpeg]', line))
+          .on('end', resolve)
+          .on('error', reject)
+          .run();
+      });
+      // 检测参数
+      const videoInfo = await getVideoInfo(mergedInputFixedPath);
+      const fps = videoInfo.fps || 30;
+      const origWidth = videoInfo.width || 1920;
+      const origHeight = videoInfo.height || 1080;
+      let preScaleWidth, width, height;
+      if (lowQuality) {
+        preScaleWidth = 2000;
+        width = 540;
+        height = Math.round(origHeight * (540 / origWidth));
+      } else {
+        preScaleWidth = 4000;
+        width = origWidth;
+        height = origHeight;
+      }
+      // 多段zoompan参数
+      let zoompanExpr = '';
+      if (multi.length > 1) {
+        let exprs = [];
+        for (const z of multi) {
+          const zoomInTime = 2.0;
+          const zoomOutTime = 2.0;
+          const zoomDuration = z.end - z.start;
+          const zoomOutStart = zoomDuration - zoomOutTime;
+          const relZoomStart = z.start - segs[0].startTime;
+          const relZoomEnd = z.end - segs[0].startTime;
+          const zoomFormula = `if(lt(it,${zoomInTime}), 1+it/${zoomInTime}, if(lt(it,${zoomOutStart}), ${z.zoom}, if(lt(it,${zoomDuration}), ${z.zoom}-(it-${zoomOutStart})/${zoomOutTime}, 1)))`;
+          exprs.push(`between(it,${relZoomStart},${relZoomEnd})*(${zoomFormula})`);
+          console.log(`  ➡️ 多段zoom: [${z.start}, ${z.end}], x=${z.x}, y=${z.y}, zoom=${z.zoom}, rel=[${relZoomStart}, ${relZoomEnd}]`);
+        }
+        zoompanExpr = exprs.join('+');
+        console.log('  ➡️ 多段zoompan表达式:', zoompanExpr);
+      } else {
+        // 单段zoom动画
+        const z = multi[0];
+        const zoomInTime = 2.0;
+        const zoomOutTime = 2.0;
+        const zoomDuration = z.end - z.start;
+        const zoomOutStart = zoomDuration - zoomOutTime;
+        const relZoomStart = z.start - segs[0].startTime;
+        const relZoomEnd = z.end - segs[0].startTime;
+        zoompanExpr = `if(lt(it,${zoomInTime}), 1+it/${zoomInTime}, if(lt(it,${zoomOutStart}), ${z.zoom}, if(lt(it,${zoomDuration}), ${z.zoom}-(it-${zoomOutStart})/${zoomOutTime}, 1)))`;
+        console.log(`  ➡️ 单段zoom: [${z.start}, ${z.end}], x=${z.x}, y=${z.y}, zoom=${z.zoom}, rel=[${relZoomStart}, ${relZoomEnd}]`);
+        console.log('  ➡️ zoompan表达式:', zoompanExpr);
+      }
+      const filterComplex = [
+        `[0:v]fps=${fps},scale=${preScaleWidth}:-1,split=3[pre][zoom][post];`,
+        `[zoom]trim=start=${start - segs[0].startTime}:end=${end - segs[0].startTime},setpts=PTS-STARTPTS,`,
+        `zoompan=z='${zoompanExpr}':`,
+        `x='${x}*iw-iw/zoom/2':`,
+        `y='${y}*ih-ih/zoom/2':`,
+        `d=1:fps=${fps}:s=${preScaleWidth}x${Math.floor(preScaleWidth * origHeight / origWidth)}[zoomed];`,
+        `[pre]trim=end=${start - segs[0].startTime},setpts=PTS-STARTPTS[first];`,
+        `[post]trim=start=${end - segs[0].startTime},setpts=PTS-STARTPTS[last];`,
+        `[first]scale=${width}:${height}:flags=lanczos,setsar=1:1[first_scaled];`,
+        `[zoomed]scale=${width}:${height}:flags=lanczos,setsar=1:1[zoomed_scaled];`,
+        `[last]scale=${width}:${height}:flags=lanczos,setsar=1:1[last_scaled];`,
+        `[first_scaled][zoomed_scaled][last_scaled]concat=n=3:v=1:a=0[outv]`
+      ].join('');
+      const zoomedPath = join(outputDir, `zoom-${idx}.ts`);
+      await new Promise((resolve, reject) => {
+        ffmpeg()
+          .input(mergedInputFixedPath)
+          .outputOptions(['-filter_complex', filterComplex, '-map', '[outv]', '-map', '0:a', '-c:v', 'libx264', '-r', fps.toString(), '-c:a', 'copy'])
+          .output(zoomedPath)
+          .on('start', cmd => console.log('[ffmpeg zoom]', cmd))
+          .on('stderr', line => console.log('[ffmpeg]', line))
+          .on('end', resolve)
+          .on('error', reject)
+          .run();
+      });
     }
+
+    // 4. playlist重建
+    const outputPlaylistPath = join(outputDir, 'playlist.m3u8');
+    // 收集头部字段
+    const headerLines = [];
+    for (const line of lines) {
+      if (line.startsWith('#EXTINF')) break;
+      headerLines.push(line);
+    }
+    const newLines = [...headerLines];
+    let segmentIdx = 0;
+    let zoomIdx = 0;
+    while (segmentIdx < segmentInfo.length) {
+      // 检查当前分片是否在某个zoom区间
+      const zoom = mergedZooms[zoomIdx];
+      if (zoom && segmentIdx === zoom.segStart) {
+        // 插入zoom分片
+        const zoomedPath = `zoom-${zoomIdx}.ts`;
+        // 计算zoom分片实际时长
+        const zoomFileInfo = await getVideoInfo(join(outputDir, zoomedPath));
+        newLines.push(`#EXTINF:${zoomFileInfo.duration},`);
+        newLines.push(zoomedPath);
+        // 跳过被替换的原分片
+        segmentIdx = zoom.segEnd + 1;
+        zoomIdx++;
+      } else {
+        // 保留原分片
+        const seg = segmentInfo[segmentIdx];
+        newLines.push(`#EXTINF:${seg.duration},`);
+        newLines.push(seg.filename);
+        segmentIdx++;
+      }
+    }
+    newLines.push('#EXT-X-ENDLIST');
+    await writeFile(outputPlaylistPath, newLines.join('\n'));
+    console.log('✅ 多段Zoom处理完成！');
+  } finally {
+    try { await rm(tempDir, { recursive: true, force: true }); } catch {}
   }
 }
-
-
 
 // 辅助函数：获取视频信息
 function getVideoInfo(filePath) {
@@ -659,51 +467,6 @@ function getVideoInfo(filePath) {
     });
   });
 }
-
-// 辅助函数：更新播放列表
-async function updatePlaylist(inputDir, outputDir, segmentStart, segmentEnd, zoomFileDuration) {
-  const inputPlaylistPath = join(inputDir, 'playlist.m3u8');
-  const outputPlaylistPath = join(outputDir, 'playlist.m3u8');
-  
-  const playlistContent = await readFile(inputPlaylistPath, 'utf8');
-  const lines = playlistContent.split('\n');
-  
-  const newLines = [];
-  let segmentIndex = 0;
-  let replaced = false;
-  
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    
-    if (line.startsWith('#EXTINF:')) {
-      const nextLine = lines[i + 1];
-      if (nextLine && nextLine.endsWith('.ts')) {
-        if (segmentIndex >= segmentStart && segmentIndex <= segmentEnd) {
-          // 在替换范围内，只插入一次zoom文件
-          if (!replaced) {
-            newLines.push('#EXTINF:' + zoomFileDuration + ',');
-            newLines.push('zoomed.ts');
-            replaced = true;
-          }
-          // 跳过原始分片
-        } else {
-          // 不在替换范围内，保持原样
-          newLines.push(line);
-          newLines.push(nextLine);
-        }
-        segmentIndex++;
-        i++; // 跳过文件名行
-      } else {
-        newLines.push(line);
-      }
-    } else {
-      newLines.push(line);
-    }
-  }
-  
-  await writeFile(outputPlaylistPath, newLines.join('\n'));
-}
-
 
 const ok = (body) => ({ statusCode: 200, body: JSON.stringify(body) });
 const error = (c, m) => ({ statusCode: c, body: m });
