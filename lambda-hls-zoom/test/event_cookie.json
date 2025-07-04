@@ -1,0 +1,16 @@
+{
+  "recordingId": "01JZABTBYQNNY4XPFAPJ6RTMYJ",
+  "manifestFileUrl": "https://cdn.freeboomshare.com/hls/ts/01JZABTBYQNNY4XPFAPJ6RTMYJ/playlist.m3u8",
+  "callbackUrl": "https://httpbin.org/post",
+  "outputS3Prefix": "hls/zoom",
+  "lowQuality": true,
+  "zooms": [
+    { "start": 3.0, "end": 9.0, "x": 0.1, "y": 0.1, "zoom": 2.0 },
+    { "start": 14.0, "end": 19.0, "x": 0.9, "y": 0.9, "zoom": 2.0 }
+  ],
+  "cloudFrontVideoCookie": {
+    "Policy": "eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly9jZG4uZnJlZWJvb21zaGFyZS5jb20vaGxzL3RzLzAxSlpBQlRCWVFOTlk0WFBGQVBKNlJUTVlKLyoiLCJDb25kaXRpb24iOnsiRGF0ZUxlc3NUaGFuIjp7IkFXUzpFcG9jaFRpbWUiOjE3NTE2MjgyOTN9fX1dfQ__",
+    "Signature": "c7K61JSjLr9SRH-2tf6yKcpuEWJguyBzkQTsBkSFneVkgoQkrm6nqo7-N9SytV3IGG86xaPo0fSFaApI1sd3HWaNRM0zbx7l8Kks14K5xGNMjsppWy0oX0~VgBHG8dccaS3JXkgP7mtxLIC9b-upMFk8hqRaMS00gPOMuGosCiC0cIV5lNyHRkwCbz8lp5Suan04uuH-P4aYKvRGe4l-lFygsqIIVNP~DU2y0QpykXC~RQ1vE9Mw0JZuQxHQeunluV7UYOqqyu45QylU4IY52AxdlKUhYKg6pH2HmobwtIUJ~V6AmLxBkXntRfYjB15HtNDu3Mw~R2e7jyWtOokBLA__",
+    "Key-Pair-Id": "KUQ90H9NHEJM0"
+  }
+}

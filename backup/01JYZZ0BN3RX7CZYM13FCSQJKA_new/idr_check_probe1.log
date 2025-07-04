@@ -1,0 +1,59 @@
+ffprobe version 7.1.1 Copyright (c) 2007-2025 the FFmpeg developers
+  built with Apple clang version 17.0.0 (clang-1700.0.13.3)
+  configuration: --prefix=/opt/homebrew/Cellar/ffmpeg/7.1.1_3 --enable-shared --enable-pthreads --enable-version3 --cc=clang --host-cflags= --host-ldflags='-Wl,-ld_classic' --enable-ffplay --enable-gnutls --enable-gpl --enable-libaom --enable-libaribb24 --enable-libbluray --enable-libdav1d --enable-libharfbuzz --enable-libjxl --enable-libmp3lame --enable-libopus --enable-librav1e --enable-librist --enable-librubberband --enable-libsnappy --enable-libsrt --enable-libssh --enable-libsvtav1 --enable-libtesseract --enable-libtheora --enable-libvidstab --enable-libvmaf --enable-libvorbis --enable-libvpx --enable-libwebp --enable-libx264 --enable-libx265 --enable-libxml2 --enable-libxvid --enable-lzma --enable-libfontconfig --enable-libfreetype --enable-frei0r --enable-libass --enable-libopencore-amrnb --enable-libopencore-amrwb --enable-libopenjpeg --enable-libspeex --enable-libsoxr --enable-libzmq --enable-libzimg --disable-libjack --disable-indev=jack --enable-videotoolbox --enable-audiotoolbox --enable-neon
+  libavutil      59. 39.100 / 59. 39.100
+  libavcodec     61. 19.101 / 61. 19.101
+  libavformat    61.  7.100 / 61.  7.100
+  libavdevice    61.  3.100 / 61.  3.100
+  libavfilter    10.  4.100 / 10.  4.100
+  libswscale      8.  3.100 /  8.  3.100
+  libswresample   5.  3.100 /  5.  3.100
+  libpostproc    58.  3.100 / 58.  3.100
+[AVFormatContext @ 0x15b805ee0] Opening '01JYZZ0BN3RX7CZYM13FCSQJKA-video-0001.ts' for reading
+[file @ 0x600001c28000] Setting default whitelist 'file,crypto,data'
+[mpegts @ 0x15b805ee0] Format mpegts probed with size=2048 and score=50
+[mpegts @ 0x15b805ee0] stream=0 stream_type=1b pid=100 prog_reg_desc=
+[mpegts @ 0x15b805ee0] stream=1 stream_type=f pid=101 prog_reg_desc=
+[mpegts @ 0x15b805ee0] Before avformat_find_stream_info() pos: 0 bytes read:32768 seeks:0 nb_streams:2
+[h264 @ 0x15b8067e0] [Eval @ 0x16db816f0] Undefined constant or missing '(' in 'h264'
+[h264 @ 0x15b8067e0] Unable to parse option value "h264"
+[h264 @ 0x15b8067e0] Error setting option debug to value h264.
+[mpegts @ 0x15b805ee0] Failed to open codec in avformat_find_stream_info
+[NULL @ 0x15b8067e0] Decoding VUI
+[extract_extradata @ 0x600000d249b0] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[extract_extradata @ 0x600000d249b0] nal_unit_type: 7(SPS), nal_ref_idc: 3
+[extract_extradata @ 0x600000d249b0] nal_unit_type: 8(PPS), nal_ref_idc: 3
+[extract_extradata @ 0x600000d249b0] nal_unit_type: 5(IDR), nal_ref_idc: 3
+[h264 @ 0x15b8067e0] [Eval @ 0x16db81660] Undefined constant or missing '(' in 'h264'
+[h264 @ 0x15b8067e0] Unable to parse option value "h264"
+[h264 @ 0x15b8067e0] Error setting option debug to value h264.
+[mpegts @ 0x15b805ee0] probing stream 1 pp:2500
+[mpegts @ 0x15b805ee0] Probe with size=2773, packets=1 detected aac with score=51
+[mpegts @ 0x15b805ee0] probed stream 1
+[aac @ 0x15b807070] [Eval @ 0x16db81660] Undefined constant or missing '(' in 'h264'
+[aac @ 0x15b807070] Unable to parse option value "h264"
+[aac @ 0x15b807070] Error setting option debug to value h264.
+[aac @ 0x15b807070] [Eval @ 0x16db816f0] Undefined constant or missing '(' in 'h264'
+[aac @ 0x15b807070] Unable to parse option value "h264"
+[aac @ 0x15b807070] Error setting option debug to value h264.
+[mpegts @ 0x15b805ee0] Failed to open codec in avformat_find_stream_info
+[mpegts @ 0x15b805ee0] rfps: 29.166667 0.009102
+    Last message repeated 1 times
+[mpegts @ 0x15b805ee0] rfps: 29.250000 0.000000
+    Last message repeated 1 times
+[mpegts @ 0x15b805ee0] rfps: 29.333333 0.009100
+[mpegts @ 0x15b805ee0] Could not find codec parameters for stream 1 (Audio: aac (LC) ([15][0][0][0] / 0x000F), 0 channels, 131 kb/s): unspecified sample rate
+Consider increasing the value for the 'analyzeduration' (0) and 'probesize' (5000000) options
+[mpegts @ 0x15b805ee0] After avformat_find_stream_info() pos: 0 bytes read:1763776 seeks:2 frames:304
+Input #0, mpegts, from '01JYZZ0BN3RX7CZYM13FCSQJKA-video-0001.ts':
+  Duration: 00:00:04.05, start: 5.417044, bitrate: 2989 kb/s
+  Program 1 
+    Metadata:
+      service_name    : Service01
+      service_provider: FFmpeg
+  Stream #0:0[0x100], 117, 1/90000: Video: h264 (High), 1 reference frame ([27][0][0][0] / 0x001B), none(progressive), 3456x2234 (3456x2240), 0/1, 29.25 fps, 29.25 tbr, 90k tbn
+  Stream #0:1[0x101](eng), 187, 1/90000: Audio: aac (LC) ([15][0][0][0] / 0x000F), 0 channels, 131 kb/s
+[h264 @ 0x15a704cc0] [Eval @ 0x16db81990] Undefined constant or missing '(' in 'h264'
+[h264 @ 0x15a704cc0] Unable to parse option value "h264"
+[h264 @ 0x15a704cc0] Error setting option debug to value h264.
+Could not open codec for input stream 0

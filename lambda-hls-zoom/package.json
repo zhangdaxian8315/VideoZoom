@@ -1,0 +1,21 @@
+{
+  "name": "lambda-hls-zoom",
+  "version": "1.0.0",
+  "description": "AWS Lambda function for HLS video zoom processing",
+  "main": "zoom-editor.mjs",
+  "type": "module",
+  "scripts": {
+    "test": "node test/zoom-editor.mjs",
+    "deploy": "serverless deploy"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.0.0",
+    "fluent-ffmpeg": "^2.1.2"
+  },
+  "devDependencies": {
+    "serverless": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+} 

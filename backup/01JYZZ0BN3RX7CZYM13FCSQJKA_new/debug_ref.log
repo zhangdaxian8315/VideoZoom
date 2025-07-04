@@ -1,0 +1,704 @@
+ffmpeg version 7.1.1 Copyright (c) 2000-2025 the FFmpeg developers
+  built with Apple clang version 17.0.0 (clang-1700.0.13.3)
+  configuration: --prefix=/opt/homebrew/Cellar/ffmpeg/7.1.1_3 --enable-shared --enable-pthreads --enable-version3 --cc=clang --host-cflags= --host-ldflags='-Wl,-ld_classic' --enable-ffplay --enable-gnutls --enable-gpl --enable-libaom --enable-libaribb24 --enable-libbluray --enable-libdav1d --enable-libharfbuzz --enable-libjxl --enable-libmp3lame --enable-libopus --enable-librav1e --enable-librist --enable-librubberband --enable-libsnappy --enable-libsrt --enable-libssh --enable-libsvtav1 --enable-libtesseract --enable-libtheora --enable-libvidstab --enable-libvmaf --enable-libvorbis --enable-libvpx --enable-libwebp --enable-libx264 --enable-libx265 --enable-libxml2 --enable-libxvid --enable-lzma --enable-libfontconfig --enable-libfreetype --enable-frei0r --enable-libass --enable-libopencore-amrnb --enable-libopencore-amrwb --enable-libopenjpeg --enable-libspeex --enable-libsoxr --enable-libzmq --enable-libzimg --disable-libjack --disable-indev=jack --enable-videotoolbox --enable-audiotoolbox --enable-neon
+  libavutil      59. 39.100 / 59. 39.100
+  libavcodec     61. 19.101 / 61. 19.101
+  libavformat    61.  7.100 / 61.  7.100
+  libavdevice    61.  3.100 / 61.  3.100
+  libavfilter    10.  4.100 / 10.  4.100
+  libswscale      8.  3.100 /  8.  3.100
+  libswresample   5.  3.100 /  5.  3.100
+  libpostproc    58.  3.100 / 58.  3.100
+ matched as AVOption 'debug' with argument 'pict'.
+Reading option '-i' ... matched as input url with argument '01JYZZ0BN3RX7CZYM13FCSQJKA-video-0000.ts'.
+Reading option '-f' ... matched as option 'f' (force container format (auto-detected otherwise)) with argument 'null'.
+Reading option '-' ... matched as output url.
+Reading option '-loglevel' ... matched as option 'loglevel' (set logging level) with argument 'debug'.
+Finished splitting the commandline.
+Parsing a group of options: global .
+Applying option loglevel (set logging level) with argument debug.
+Successfully parsed a group of options.
+Parsing a group of options: input url 01JYZZ0BN3RX7CZYM13FCSQJKA-video-0000.ts.
+Successfully parsed a group of options.
+Opening an input file: 01JYZZ0BN3RX7CZYM13FCSQJKA-video-0000.ts.
+[AVFormatContext @ 0x151f06470] Opening '01JYZZ0BN3RX7CZYM13FCSQJKA-video-0000.ts' for reading
+[file @ 0x6000000fc000] Setting default whitelist 'file,crypto,data'
+[mpegts @ 0x151f06470] Format mpegts probed with size=2048 and score=50
+[mpegts @ 0x151f06470] stream=0 stream_type=1b pid=100 prog_reg_desc=
+[mpegts @ 0x151f06470] stream=1 stream_type=f pid=101 prog_reg_desc=
+[mpegts @ 0x151f06470] Before avformat_find_stream_info() pos: 0 bytes read:32768 seeks:0 nb_streams:2
+[h264 @ 0x151f06d70] Decoding VUI
+[h264 @ 0x151f06d70] sps:0 profile:100/51 poc:0 ref:4 216x140 FRM 8B8 crop:0/0/0/6 VUI 420 4/234 b8 reo:2
+[h264 @ 0x151f06d70] pps:0 sps:0 CABAC slice_groups:1 ref:1/1 weighted qp:23/26/0/0 LPAR   
+[extract_extradata @ 0x6000011f0a00] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[extract_extradata @ 0x6000011f0a00] nal_unit_type: 7(SPS), nal_ref_idc: 3
+[extract_extradata @ 0x6000011f0a00] nal_unit_type: 8(PPS), nal_ref_idc: 3
+[extract_extradata @ 0x6000011f0a00] nal_unit_type: 6(SEI), nal_ref_idc: 0
+[extract_extradata @ 0x6000011f0a00] nal_unit_type: 5(IDR), nal_ref_idc: 3
+[h264 @ 0x151f06d70] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f06d70] nal_unit_type: 7(SPS), nal_ref_idc: 3
+[h264 @ 0x151f06d70] nal_unit_type: 8(PPS), nal_ref_idc: 3
+[h264 @ 0x151f06d70] nal_unit_type: 6(SEI), nal_ref_idc: 0
+[h264 @ 0x151f06d70] nal_unit_type: 5(IDR), nal_ref_idc: 3
+[h264 @ 0x151f06d70] Decoding VUI
+[h264 @ 0x151f06d70] sps:0 profile:100/51 poc:0 ref:4 216x140 FRM 8B8 crop:0/0/0/6 VUI 420 4/234 b8 reo:2
+[h264 @ 0x151f06d70] pps:0 sps:0 CABAC slice_groups:1 ref:1/1 weighted qp:23/26/0/0 LPAR   8x8DCT
+[h264 @ 0x151f06d70] Format yuv420p chosen by get_format().
+[h264 @ 0x151f06d70] Reinit context to 3456x2240, pix_fmt: yuv420p
+[h264 @ 0x151f06d70] no picture 
+[h264 @ 0x151f06d70] slice:1 F mb:0 I fix IDR frame:0 poc:65536/65536 ref:0/0 qp:19 loop:1:0:0 weight:0 
+[mpegts @ 0x151f06470] probing stream 1 pp:2500
+[mpegts @ 0x151f06470] Probe with size=2684, packets=1 detected aac with score=51
+[mpegts @ 0x151f06470] probed stream 1
+Transform tree:
+    mdct_pfa_3xM_inv_float_c - type: mdct_float, len: 96, factors[2]: [3, any], flags: [unaligned, out_of_place, inv_only]
+        fft16_ns_float_neon - type: fft_float, len: 16, factor: 2, flags: [aligned, inplace, out_of_place, preshuf]
+Transform tree:
+    mdct_pfa_15xM_inv_float_c - type: mdct_float, len: 120, factors[2]: [15, any], flags: [unaligned, out_of_place, inv_only]
+        fft4_fwd_float_neon - type: fft_float, len: 4, factor: 2, flags: [aligned, inplace, out_of_place, preshuf]
+Transform tree:
+    mdct_inv_float_c - type: mdct_float, len: 128, factors[2]: [2, any], flags: [unaligned, out_of_place, inv_only]
+        fft_sr_ns_float_neon - type: fft_float, len: 64, factor: 2, flags: [aligned, inplace, out_of_place, preshuf]
+Transform tree:
+    mdct_pfa_15xM_inv_float_c - type: mdct_float, len: 480, factors[2]: [15, any], flags: [unaligned, out_of_place, inv_only]
+        fft16_ns_float_neon - type: fft_float, len: 16, factor: 2, flags: [aligned, inplace, out_of_place, preshuf]
+Transform tree:
+    mdct_inv_float_c - type: mdct_float, len: 512, factors[2]: [2, any], flags: [unaligned, out_of_place, inv_only]
+        fft_sr_ns_float_neon - type: fft_float, len: 256, factor: 2, flags: [aligned, inplace, out_of_place, preshuf]
+Transform tree:
+    mdct_pfa_3xM_inv_float_c - type: mdct_float, len: 768, factors[2]: [3, any], flags: [unaligned, out_of_place, inv_only]
+        fft_sr_ns_float_neon - type: fft_float, len: 128, factor: 2, flags: [aligned, inplace, out_of_place, preshuf]
+Transform tree:
+    mdct_pfa_15xM_inv_float_c - type: mdct_float, len: 960, factors[2]: [15, any], flags: [unaligned, out_of_place, inv_only]
+        fft32_ns_float_neon - type: fft_float, len: 32, factor: 2, flags: [aligned, inplace, out_of_place, preshuf]
+Transform tree:
+    mdct_inv_float_c - type: mdct_float, len: 1024, factors[2]: [2, any], flags: [unaligned, out_of_place, inv_only]
+        fft_sr_ns_float_neon - type: fft_float, len: 512, factor: 2, flags: [aligned, inplace, out_of_place, preshuf]
+Transform tree:
+    mdct_fwd_float_c - type: mdct_float, len: 1024, factors[2]: [2, any], flags: [unaligned, out_of_place, fwd_only]
+        fft_sr_ns_float_neon - type: fft_float, len: 512, factor: 2, flags: [aligned, inplace, out_of_place, preshuf]
+Transform tree:
+    mdct_inv_float_c - type: mdct_float, len: 64, factors[2]: [2, any], flags: [unaligned, out_of_place, inv_only]
+        fft32_ns_float_neon - type: fft_float, len: 32, factor: 2, flags: [aligned, inplace, out_of_place, preshuf]
+Transform tree:
+    mdct_inv_float_c - type: mdct_float, len: 64, factors[2]: [2, any], flags: [unaligned, out_of_place, inv_only]
+        fft32_ns_float_neon - type: fft_float, len: 32, factor: 2, flags: [aligned, inplace, out_of_place, preshuf]
+[mpegts @ 0x151f06470] rfps: 29.166667 0.009102
+    Last message repeated 1 times
+[mpegts @ 0x151f06470] rfps: 29.250000 0.000000
+    Last message repeated 1 times
+[mpegts @ 0x151f06470] rfps: 29.333333 0.009100
+    Last message repeated 1 times
+[mpegts @ 0x151f06470] After avformat_find_stream_info() pos: 0 bytes read:1838412 seeks:2 frames:303
+Input #0, mpegts, from '01JYZZ0BN3RX7CZYM13FCSQJKA-video-0000.ts':
+  Duration: 00:00:04.02, start: 1.447044, bitrate: 3159 kb/s
+  Program 1 
+    Metadata:
+      service_name    : Service01
+      service_provider: FFmpeg
+  Stream #0:0[0x100], 117, 1/90000: Video: h264 (High), 1 reference frame ([27][0][0][0] / 0x001B), yuv420p(tv, bt709, progressive, left), 3456x2234 [SAR 1:1 DAR 1728:1117], 0/1, 29.25 fps, 29.25 tbr, 90k tbn
+  Stream #0:1[0x101](eng), 186, 1/90000: Audio: aac (LC) ([15][0][0][0] / 0x000F), 48000 Hz, stereo, fltp, 130 kb/s
+Successfully opened the file.
+Parsing a group of options: output url -.
+Applying option f (force container format (auto-detected otherwise)) with argument null.
+Successfully parsed a group of options.
+Opening an output file: -.
+[out#0/null @ 0x6000007fc000] No explicit maps, mapping streams automatically...
+[vost#0:0/wrapped_avframe @ 0x151f07ec0] Created video stream from input stream 0:0
+detected 14 logical cores
+[h264 @ 0x151f0a040] nal_unit_type: 7(SPS), nal_ref_idc: 3
+[h264 @ 0x151f0a040] nal_unit_type: 8(PPS), nal_ref_idc: 3
+[h264 @ 0x151f0a040] Decoding VUI
+[h264 @ 0x151f0a040] sps:0 profile:100/51 poc:0 ref:4 216x140 FRM 8B8 crop:0/0/0/6 VUI 420 4/234 b8 reo:2
+[h264 @ 0x151f0a040] pps:0 sps:0 CABAC slice_groups:1 ref:1/1 weighted qp:23/26/0/0 LPAR   8x8DCT
+[aost#0:1/pcm_s16le @ 0x151f8b830] Created audio stream from input stream 0:1
+Transform tree:
+    mdct_inv_float_c - type: mdct_float, len: 64, factors[2]: [2, any], flags: [unaligned, out_of_place, inv_only]
+        fft32_ns_float_neon - type: fft_float, len: 32, factor: 2, flags: [aligned, inplace, out_of_place, preshuf]
+Transform tree:
+    mdct_inv_float_c - type: mdct_float, len: 64, factors[2]: [2, any], flags: [unaligned, out_of_place, inv_only]
+        fft32_ns_float_neon - type: fft_float, len: 32, factor: 2, flags: [aligned, inplace, out_of_place, preshuf]
+Transform tree:
+    mdct_pfa_3xM_inv_float_c - type: mdct_float, len: 96, factors[2]: [3, any], flags: [unaligned, out_of_place, inv_only]
+        fft16_ns_float_neon - type: fft_float, len: 16, factor: 2, flags: [aligned, inplace, out_of_place, preshuf]
+Transform tree:
+    mdct_pfa_15xM_inv_float_c - type: mdct_float, len: 120, factors[2]: [15, any], flags: [unaligned, out_of_place, inv_only]
+        fft4_fwd_float_neon - type: fft_float, len: 4, factor: 2, flags: [aligned, inplace, out_of_place, preshuf]
+Transform tree:
+    mdct_inv_float_c - type: mdct_float, len: 128, factors[2]: [2, any], flags: [unaligned, out_of_place, inv_only]
+        fft_sr_ns_float_neon - type: fft_float, len: 64, factor: 2, flags: [aligned, inplace, out_of_place, preshuf]
+Transform tree:
+    mdct_pfa_15xM_inv_float_c - type: mdct_float, len: 480, factors[2]: [15, any], flags: [unaligned, out_of_place, inv_only]
+        fft16_ns_float_neon - type: fft_float, len: 16, factor: 2, flags: [aligned, inplace, out_of_place, preshuf]
+Transform tree:
+    mdct_inv_float_c - type: mdct_float, len: 512, factors[2]: [2, any], flags: [unaligned, out_of_place, inv_only]
+        fft_sr_ns_float_neon - type: fft_float, len: 256, factor: 2, flags: [aligned, inplace, out_of_place, preshuf]
+Transform tree:
+    mdct_pfa_3xM_inv_float_c - type: mdct_float, len: 768, factors[2]: [3, any], flags: [unaligned, out_of_place, inv_only]
+        fft_sr_ns_float_neon - type: fft_float, len: 128, factor: 2, flags: [aligned, inplace, out_of_place, preshuf]
+Transform tree:
+    mdct_pfa_15xM_inv_float_c - type: mdct_float, len: 960, factors[2]: [15, any], flags: [unaligned, out_of_place, inv_only]
+        fft32_ns_float_neon - type: fft_float, len: 32, factor: 2, flags: [aligned, inplace, out_of_place, preshuf]
+Transform tree:
+    mdct_inv_float_c - type: mdct_float, len: 1024, factors[2]: [2, any], flags: [unaligned, out_of_place, inv_only]
+        fft_sr_ns_float_neon - type: fft_float, len: 512, factor: 2, flags: [aligned, inplace, out_of_place, preshuf]
+Transform tree:
+    mdct_fwd_float_c - type: mdct_float, len: 1024, factors[2]: [2, any], flags: [unaligned, out_of_place, fwd_only]
+        fft_sr_ns_float_neon - type: fft_float, len: 512, factor: 2, flags: [aligned, inplace, out_of_place, preshuf]
+Successfully opened the file.
+Stream mapping:
+  Stream #0:0 -> #0:0 (h264 (native) -> wrapped_avframe (native))
+  Stream #0:1 -> #0:1 (aac (native) -> pcm_s16le (native))
+[vost#0:0/wrapped_avframe @ 0x151f07ec0] Starting thread...
+[aost#0:1/pcm_s16le @ 0x151f8b830] Starting thread...
+[vf#0:0 @ 0x6000003f0140] Starting thread...
+[af#0:1 @ 0x6000003f0320] Starting thread...
+[vist#0:0/h264 @ 0x151f07600] [dec:h264 @ 0x151f092c0] Starting thread...
+[aist#0:1/aac @ 0x151f07770] [dec:aac @ 0x151f8cf50] Starting thread...
+[in#0/mpegts @ 0x600000efc600] Starting thread...
+Press [q] to stop, [?] for help
+[h264 @ 0x151f15590] nal_unit_type: 7(SPS), nal_ref_idc: 3
+[h264 @ 0x151f15590] nal_unit_type: 8(PPS), nal_ref_idc: 3
+[h264 @ 0x151f15590] Decoding VUI
+    Last message repeated 1 times
+[h264 @ 0x151f0a040] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f0a040] nal_unit_type: 7(SPS), nal_ref_idc: 3
+[h264 @ 0x151f0a040] nal_unit_type: 8(PPS), nal_ref_idc: 3
+[h264 @ 0x151f0a040] nal_unit_type: 6(SEI), nal_ref_idc: 0
+[aac @ 0x151f8d530] FILL:avc58.134.100
+[h264 @ 0x151f0a040] nal_unit_type: 5(IDR), nal_ref_idc: 3
+[h264 @ 0x151f0a040] Decoding VUI
+[h264 @ 0x151f0a040] sps:0 profile:100/51 poc:0 ref:4 216x140 FRM 8B8 crop:0/0/0/6 VUI 420 4/234 b8 reo:2
+[h264 @ 0x151f0a040] pps:0 sps:0 CABAC slice_groups:1 ref:1/1 weighted qp:23/26/0/0 LPAR   8x8DCT
+[h264 @ 0x151f0a040] Format yuv420p chosen by get_format().
+[h264 @ 0x151f0a040] Reinit context to 3456x2240, pix_fmt: yuv420p
+[graph_-1_in_0:1 @ 0x6000005dc0b0] Setting 'time_base' to value '1/48000'
+[graph_-1_in_0:1 @ 0x6000005dc0b0] Setting 'sample_rate' to value '48000'
+[graph_-1_in_0:1 @ 0x6000005dc0b0] Setting 'sample_fmt' to value 'fltp'
+[graph_-1_in_0:1 @ 0x6000005dc0b0] Setting 'channel_layout' to value 'stereo'
+[graph_-1_in_0:1 @ 0x6000005dc0b0] tb:1/48000 samplefmt:fltp samplerate:48000 chlayout:stereo
+[format_out_#0:1 @ 0x6000005dc210] Setting 'sample_fmts' to value 's16'
+[format_out_#0:1 @ 0x6000005dc210] auto-inserting filter 'auto_aresample_0' between the filter 'Parsed_anull_0' and the filter 'format_out_#0:1'
+[AVFilterGraph @ 0x6000019fc620] query_formats: 4 queried, 4 merged, 6 already done, 0 delayed
+[h264 @ 0x151f0a040] no picture 
+[h264 @ 0x151f0a040] slice:1 F mb:0 I fix IDR frame:0 poc:65536/65536 ref:0/0 qp:19 loop:1:0:0 weight:0 
+[auto_aresample_0 @ 0x6000005dc2c0] [SWR @ 0x128008000] Using fltp internally between filters
+[auto_aresample_0 @ 0x6000005dc2c0] ch:2 chl:stereo fmt:fltp r:48000Hz -> ch:2 chl:stereo fmt:s16 r:48000Hz
+[h264 @ 0x151f129c0] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f129c0] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f129c0] no picture 
+[h264 @ 0x151f129c0] slice:1 F mb:0 P fix frame:1 poc:65544/65544 ref:1/1 qp:17 loop:1:0:0 weight:0 
+[h264 @ 0x151f1b770] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f1b770] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f1b770] slice:1 F mb:0 B fix frame:2 poc:65540/65540 ref:1/1 qp:20 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f240f0] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f240f0] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f240f0] slice:1 F mb:0 B fix frame:3 poc:65538/65538 ref:1/1 qp:21 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f2ca70] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f2ca70] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f2ca70] slice:1 F mb:0 B fix frame:3 poc:65542/65542 ref:1/1 qp:20 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f35520] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f35520] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f35520] slice:1 F mb:0 P fix frame:3 poc:65548/65548 ref:1/1 qp:20 loop:1:0:0 weight:0 
+[h264 @ 0x151f3dd80] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f3dd80] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f3dd80] slice:1 F mb:0 B fix frame:4 poc:65546/65546 ref:1/1 qp:20 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f46700] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f46700] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f46700] slice:1 F mb:0 P fix frame:4 poc:65552/65552 ref:1/1 qp:14 loop:1:0:0 weight:0 
+[h264 @ 0x151f4f080] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f4f080] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f4f080] slice:1 F mb:0 B fix frame:5 poc:65550/65550 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f57a00] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f57a00] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f57a00] slice:1 F mb:0 P fix frame:5 poc:65558/65558 ref:1/1 qp:14 loop:1:0:0 weight:0 
+[h264 @ 0x151f60380] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f60380] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f60380] slice:1 F mb:0 B fix frame:6 poc:65554/65554 ref:1/1 qp:13 loop:1:0:0 weight:2 SPAT
+[h264 @ 0x151f68d00] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f68d00] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f68d00] slice:1 F mb:0 B fix frame:7 poc:65556/65556 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f71680] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f71680] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f71680] slice:1 F mb:0 P fix frame:7 poc:65560/65560 ref:1/1 qp:14 loop:1:0:0 weight:0 
+[h264 @ 0x151f7a000] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f7a000] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f7a000] slice:1 F mb:0 P fix frame:8 poc:65562/65562 ref:1/1 qp:14 loop:1:0:0 weight:0 
+[h264 @ 0x151f82980] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f82980] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f82980] slice:1 F mb:0 P fix frame:9 poc:65564/65564 ref:1/1 qp:14 loop:1:0:0 weight:0 
+[h264 @ 0x151f0a040] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f0a040] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f35520] Adding 31690 MVs info to frame 0
+[h264 @ 0x151f2ca70] Adding 31391 MVs info to frame 0
+[h264 @ 0x151f46700] Adding 30268 MVs info to frame 0
+[h264 @ 0x151f3dd80] Adding 17476 MVs info to frame 0
+[h264 @ 0x151f240f0] Adding 60478 MVs info to frame 0
+[h264 @ 0x151f57a00] Adding 30232 MVs info to frame 0
+[h264 @ 0x151f4f080] Adding 29767 MVs info to frame 0
+[h264 @ 0x151f60380] Adding 29334 MVs info to frame 0
+[h264 @ 0x151f71680] Adding 56740 MVs info to frame 0
+[h264 @ 0x151f0a040] slice:1 F mb:0 P fix frame:10 poc:65566/65566 ref:1/1 qp:14 loop:1:0:0 weight:0 
+[h264 @ 0x151f129c0] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f68d00] Adding 58160 MVs info to frame 0
+[h264 @ 0x151f129c0] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[graph -1 input from stream 0:0 @ 0x6000005f8b00] Setting 'video_size' to value '3456x2234'
+[graph -1 input from stream 0:0 @ 0x6000005f8b00] Setting 'pix_fmt' to value '0'
+[graph -1 input from stream 0:0 @ 0x6000005f8b00] Setting 'time_base' to value '1/90000'
+[graph -1 input from stream 0:0 @ 0x6000005f8b00] Setting 'pixel_aspect' to value '1/1'
+[graph -1 input from stream 0:0 @ 0x6000005f8b00] Setting 'colorspace' to value '1'
+[graph -1 input from stream 0:0 @ 0x6000005f8b00] Setting 'range' to value '1'
+[graph -1 input from stream 0:0 @ 0x6000005f8b00] Setting 'frame_rate' to value '117/4'
+[graph -1 input from stream 0:0 @ 0x6000005f8b00] w:3456 h:2234 pixfmt:yuv420p tb:1/90000 fr:117/4 sar:1/1 csp:bt709 range:tv
+[AVFilterGraph @ 0x6000019fb410] query_formats: 3 queried, 6 merged, 0 already done, 0 delayed
+[graph -1 input from stream 0:0 @ 0x6000005f8b00] video frame properties congruent with link at pts_time: 0.0213333
+Output #0, null, to 'pipe:':
+  Metadata:
+    encoder         : Lavf61.7.100
+  Stream #0:0, 0, 4/117: Video: wrapped_avframe, 1 reference frame, yuv420p(tv, bt709, progressive, left), 3456x2234 [SAR 1:1 DAR 1728:1117], 0/1, q=2-31, 200 kb/s, 29.25 fps, 29.25 tbn
+      Metadata:
+        encoder         : Lavc61.19.101 wrapped_avframe
+  Stream #0:1(eng), 0, 1/48000: Audio: pcm_s16le, 48000 Hz, stereo, s16, 1536 kb/s
+      Metadata:
+        encoder         : Lavc61.19.101 pcm_s16le
+[out#0/null @ 0x6000007fc000] Starting thread...
+[h264 @ 0x151f7a000] Adding 29842 MVs info to frame 0
+[h264 @ 0x151f129c0] slice:1 F mb:0 P fix frame:11 poc:65568/65568 ref:1/1 qp:13 loop:1:0:0 weight:0 
+[h264 @ 0x151f1b770] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f1b770] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f82980] Adding 29509 MVs info to frame 0
+[h264 @ 0x151f1b770] slice:1 F mb:0 P fix frame:12 poc:65570/65570 ref:1/1 qp:14 loop:1:0:0 weight:0 
+[h264 @ 0x151f240f0] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f240f0] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f240f0] slice:1 F mb:0 P fix frame:13 poc:65572/65572 ref:1/1 qp:12 loop:1:0:0 weight:0 
+[h264 @ 0x151f2ca70] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f2ca70] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f2ca70] slice:1 F mb:0 P fix frame:14 poc:65574/65574 ref:1/1 qp:13 loop:1:0:0 weight:0 
+[h264 @ 0x151f35520] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f35520] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f35520] slice:1 F mb:0 P fix frame:15 poc:65576/65576 ref:1/1 qp:14 loop:1:0:0 weight:0 
+[h264 @ 0x151f3dd80] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f3dd80] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f3dd80] slice:1 F mb:0 P fix frame:0 poc:65578/65578 ref:1/1 qp:13 loop:1:0:0 weight:0 
+[h264 @ 0x151f46700] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f46700] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f46700] slice:1 F mb:0 P fix frame:1 poc:65580/65580 ref:1/1 qp:14 loop:1:0:0 weight:0 
+[h264 @ 0x151f4f080] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f4f080] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f4f080] slice:1 F mb:0 P fix frame:2 poc:65582/65582 ref:1/1 qp:11 loop:1:0:0 weight:0 
+[h264 @ 0x151f57a00] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f57a00] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f57a00] slice:1 F mb:0 P fix frame:3 poc:65586/65586 ref:1/1 qp:11 loop:1:0:0 weight:0 
+[h264 @ 0x151f60380] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f60380] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f60380] slice:1 F mb:0 B fix frame:4 poc:65584/65584 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f68d00] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f68d00] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f68d00] slice:1 F mb:0 P fix frame:4 poc:65590/65590 ref:1/1 qp:10 loop:1:0:0 weight:0 
+[h264 @ 0x151f71680] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f71680] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f71680] slice:1 F mb:0 B fix frame:5 poc:65588/65588 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f7a000] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f7a000] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f7a000] slice:1 F mb:0 P fix frame:5 poc:65596/65596 ref:1/1 qp:10 loop:1:0:0 weight:0 
+[h264 @ 0x151f82980] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f82980] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f0a040] Adding 30204 MVs info to frame 0
+[h264 @ 0x151f82980] slice:1 F mb:0 B fix frame:6 poc:65592/65592 ref:1/1 qp:13 loop:1:0:0 weight:2 SPAT
+[h264 @ 0x151f0a040] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f0a040] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f0a040] slice:1 F mb:0 B fix frame:7 poc:65594/65594 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f129c0] Adding 29808 MVs info to frame 0
+[h264 @ 0x151f129c0] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f129c0] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f129c0] slice:1 F mb:0 P fix frame:7 poc:65604/65604 ref:1/1 qp:11 loop:1:0:0 weight:0 
+[h264 @ 0x151f1b770] Adding 29308 MVs info to frame 1
+[h264 @ 0x151f240f0] Adding 29810 MVs info to frame 2
+[h264 @ 0x151f2ca70] Adding 28150 MVs info to frame 3
+[h264 @ 0x151f35520] Adding 29543 MVs info to frame 4
+[h264 @ 0x151f1b770] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f1b770] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f1b770] slice:1 F mb:0 B fix frame:8 poc:65600/65600 ref:1/1 qp:13 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f3dd80] Adding 29912 MVs info to frame 5
+[h264 @ 0x151f46700] Adding 28886 MVs info to frame 6
+[h264 @ 0x151f240f0] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f240f0] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f240f0] slice:1 F mb:0 B fix frame:9 poc:65598/65598 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f4f080] Adding 29876 MVs info to frame 7
+[h264 @ 0x151f2ca70] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f2ca70] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f2ca70] slice:1 F mb:0 B fix frame:9 poc:65602/65602 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f57a00] Adding 29834 MVs info to frame 8
+[h264 @ 0x151f35520] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f35520] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f35520] slice:1 F mb:0 P fix frame:9 poc:65610/65610 ref:1/1 qp:11 loop:1:0:0 weight:0 
+[h264 @ 0x151f3dd80] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f3dd80] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f3dd80] slice:1 F mb:0 B fix frame:10 poc:65606/65606 ref:1/1 qp:13 loop:1:0:0 weight:2 SPAT
+[h264 @ 0x151f46700] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f46700] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f46700] slice:1 F mb:0 B fix frame:11 poc:65608/65608 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f4f080] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f4f080] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f4f080] slice:1 F mb:0 P fix frame:11 poc:65614/65614 ref:1/1 qp:10 loop:1:0:0 weight:0 
+[h264 @ 0x151f57a00] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f57a00] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f57a00] slice:1 F mb:0 B fix frame:12 poc:65612/65612 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f60380] Adding 29393 MVs info to frame 9
+[h264 @ 0x151f60380] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f60380] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f60380] slice:1 F mb:0 P fix frame:12 poc:65620/65620 ref:1/1 qp:10 loop:1:0:0 weight:0 
+[h264 @ 0x151f68d00] Adding 60086 MVs info to frame 10
+[h264 @ 0x151f68d00] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f68d00] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f68d00] slice:1 F mb:0 B fix frame:13 poc:65616/65616 ref:1/1 qp:13 loop:1:0:0 weight:2 SPAT
+[h264 @ 0x151f71680] Adding 29464 MVs info to frame 11
+[h264 @ 0x151f7a000] Adding 59478 MVs info to frame 12
+[h264 @ 0x151f71680] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f71680] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f71680] slice:1 F mb:0 B fix frame:14 poc:65618/65618 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f7a000] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f7a000] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f7a000] slice:1 F mb:0 P fix frame:14 poc:65626/65626 ref:1/1 qp:10 loop:1:0:0 weight:0 
+[h264 @ 0x151f82980] Adding 28619 MVs info to frame 13
+[h264 @ 0x151f129c0] Adding 57307 MVs info to frame 15
+[h264 @ 0x151f82980] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f82980] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f82980] slice:1 F mb:0 B fix frame:15 poc:65622/65622 ref:1/1 qp:13 loop:1:0:0 weight:2 SPAT
+[h264 @ 0x151f0a040] Adding 58051 MVs info to frame 14
+[h264 @ 0x151f0a040] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f0a040] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f0a040] slice:1 F mb:0 B fix frame:0 poc:65624/65624 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f129c0] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f129c0] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f129c0] slice:1 F mb:0 P fix frame:0 poc:65632/65632 ref:1/1 qp:10 loop:1:0:0 weight:0 
+[h264 @ 0x151f1b770] Adding 29056 MVs info to frame 16
+[h264 @ 0x151f1b770] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f1b770] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f2ca70] Adding 58929 MVs info to frame 18
+[h264 @ 0x151f1b770] slice:1 F mb:0 B fix frame:1 poc:65628/65628 ref:1/1 qp:13 loop:1:0:0 weight:2 SPAT
+[h264 @ 0x151f240f0] Adding 59981 MVs info to frame 17
+[h264 @ 0x151f240f0] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f240f0] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f240f0] slice:1 F mb:0 B fix frame:2 poc:65630/65630 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f2ca70] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f2ca70] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f2ca70] slice:1 F mb:0 P fix frame:2 poc:65638/65638 ref:1/1 qp:10 loop:1:0:0 weight:0 
+[h264 @ 0x151f35520] Adding 60409 MVs info to frame 19
+[h264 @ 0x151f3dd80] Adding 29082 MVs info to frame 20
+[h264 @ 0x151f4f080] Adding 59702 MVs info to frame 22
+[h264 @ 0x151f35520] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f35520] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f35520] slice:1 F mb:0 B fix frame:3 poc:65634/65634 ref:1/1 qp:13 loop:1:0:0 weight:2 SPAT
+[h264 @ 0x151f60380] Adding 54529 MVs info to frame 24
+[h264 @ 0x151f3dd80] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f3dd80] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f46700] Adding 59760 MVs info to frame 21
+[h264 @ 0x151f3dd80] slice:1 F mb:0 B fix frame:4 poc:65636/65636 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f46700] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f46700] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f46700] slice:1 F mb:0 P fix frame:4 poc:65646/65646 ref:1/1 qp:11 loop:1:0:0 weight:0 
+[h264 @ 0x151f4f080] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f4f080] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f4f080] slice:1 F mb:0 B fix frame:5 poc:65642/65642 ref:1/1 qp:13 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f7a000] Adding 57245 MVs info to frame 27
+[h264 @ 0x151f68d00] Adding 30079 MVs info to frame 25
+[h264 @ 0x151f57a00] Adding 30176 MVs info to frame 23
+[h264 @ 0x151f57a00] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f57a00] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f57a00] slice:1 F mb:0 B fix frame:6 poc:65640/65640 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f60380] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f60380] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f60380] slice:1 F mb:0 B fix frame:6 poc:65644/65644 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f82980] Adding 25261 MVs info to frame 28
+[h264 @ 0x151f68d00] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f68d00] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f71680] Adding 59797 MVs info to frame 26
+[h264 @ 0x151f68d00] slice:1 F mb:0 P fix frame:6 poc:65648/65648 ref:1/1 qp:10 loop:1:0:0 weight:0 
+[h264 @ 0x151f0a040] Adding 59989 MVs info to frame 29
+[h264 @ 0x151f71680] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f129c0] Adding 60468 MVs info to frame 30
+[h264 @ 0x151f71680] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f71680] slice:1 F mb:0 P fix frame:7 poc:65656/65656 ref:1/1 qp:10 loop:1:0:0 weight:0 
+[h264 @ 0x151f7a000] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f7a000] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f7a000] slice:1 F mb:0 B fix frame:8 poc:65652/65652 ref:1/1 qp:13 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f82980] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f82980] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f82980] slice:1 F mb:0 B fix frame:9 poc:65650/65650 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f0a040] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f0a040] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f0a040] slice:1 F mb:0 B fix frame:9 poc:65654/65654 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f129c0] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f129c0] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f129c0] slice:1 F mb:0 P fix frame:9 poc:65664/65664 ref:1/1 qp:10 loop:1:0:0 weight:0 
+[h264 @ 0x151f1b770] Adding 29065 MVs info to frame 31
+[h264 @ 0x151f2ca70] Adding 60399 MVs info to frame 33
+[h264 @ 0x151f1b770] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f1b770] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f1b770] slice:1 F mb:0 B fix frame:10 poc:65660/65660 ref:1/1 qp:13 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f46700] Adding 51916 MVs info to frame 36
+[h264 @ 0x151f35520] Adding 29937 MVs info to frame 34
+[h264 @ 0x151f240f0] Adding 60264 MVs info to frame 32
+[h264 @ 0x151f68d00] Adding 56821 MVs info to frame 40
+[h264 @ 0x151f240f0] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f240f0] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f240f0] slice:1 F mb:0 B fix frame:11 poc:65658/65658 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f2ca70] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f2ca70] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f2ca70] slice:1 F mb:0 B fix frame:11 poc:65662/65662 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f35520] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f35520] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f35520] slice:1 F mb:0 P fix frame:11 poc:65672/65672 ref:1/1 qp:10 loop:1:0:0 weight:0 
+[h264 @ 0x151f4f080] Adding 30220 MVs info to frame 37
+[h264 @ 0x151f3dd80] Adding 60320 MVs info to frame 35
+[h264 @ 0x151f57a00] Adding 60458 MVs info to frame 38
+[h264 @ 0x151f60380] Adding 60173 MVs info to frame 39
+[h264 @ 0x151f3dd80] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f3dd80] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f3dd80] slice:1 F mb:0 B fix frame:12 poc:65668/65668 ref:1/1 qp:13 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f46700] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f46700] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f46700] slice:1 F mb:0 B fix frame:13 poc:65666/65666 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f4f080] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f4f080] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f4f080] slice:1 F mb:0 B fix frame:13 poc:65670/65670 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f57a00] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f57a00] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f57a00] slice:1 F mb:0 P fix frame:13 poc:65680/65680 ref:1/1 qp:10 loop:1:0:0 weight:0 
+[h264 @ 0x151f60380] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f60380] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f60380] slice:1 F mb:0 B fix frame:14 poc:65676/65676 ref:1/1 qp:13 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f68d00] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f68d00] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f68d00] slice:1 F mb:0 B fix frame:15 poc:65674/65674 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f71680] Adding 29155 MVs info to frame 41
+[h264 @ 0x151f71680] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f71680] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f71680] slice:1 F mb:0 B fix frame:15 poc:65678/65678 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f7a000] Adding 30056 MVs info to frame 42
+[h264 @ 0x151f129c0] Adding 35021 MVs info to frame 45
+[h264 @ 0x151f7a000] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f7a000] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f7a000] slice:1 F mb:0 P fix frame:15 poc:65688/65688 ref:1/1 qp:10 loop:1:0:0 weight:0 
+[h264 @ 0x151f35520] Adding 60453 MVs info to frame 49
+[h264 @ 0x151f82980] Adding 60431 MVs info to frame 43
+[h264 @ 0x151f0a040] Adding 35005 MVs info to frame 44
+[h264 @ 0x151f82980] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f82980] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f82980] slice:1 F mb:0 B fix frame:0 poc:65684/65684 ref:1/1 qp:13 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f0a040] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f0a040] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f0a040] slice:1 F mb:0 B fix frame:1 poc:65682/65682 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f129c0] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f129c0] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f129c0] slice:1 F mb:0 B fix frame:1 poc:65686/65686 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f1b770] Adding 3832 MVs info to frame 46
+[h264 @ 0x151f1b770] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f1b770] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f1b770] slice:1 F mb:0 P fix frame:1 poc:65696/65696 ref:1/1 qp:10 loop:1:0:0 weight:0 
+[h264 @ 0x151f57a00] Adding 55214 MVs info to frame 53
+[h264 @ 0x151f240f0] Adding 59826 MVs info to frame 47
+[h264 @ 0x151f7a000] Adding 60376 MVs info to frame 57
+[h264 @ 0x151f240f0] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f240f0] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f240f0] slice:1 F mb:0 B fix frame:2 poc:65692/65692 ref:1/1 qp:13 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f2ca70] Adding 59800 MVs info to frame 48
+[h264 @ 0x151f2ca70] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f2ca70] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f3dd80] Adding 29277 MVs info to frame 50
+[h264 @ 0x151f2ca70] slice:1 F mb:0 B fix frame:3 poc:65690/65690 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f35520] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f35520] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f35520] slice:1 F mb:0 B fix frame:3 poc:65694/65694 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f4f080] Adding 60462 MVs info to frame 52
+[h264 @ 0x151f3dd80] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f3dd80] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f3dd80] slice:1 F mb:0 P fix frame:3 poc:65704/65704 ref:1/1 qp:10 loop:1:0:0 weight:0 
+[h264 @ 0x151f46700] Adding 60482 MVs info to frame 51
+[h264 @ 0x151f46700] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f46700] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f46700] slice:1 F mb:0 B fix frame:4 poc:65700/65700 ref:1/1 qp:13 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f4f080] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f4f080] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f4f080] slice:1 F mb:0 B fix frame:5 poc:65698/65698 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f57a00] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f57a00] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f57a00] slice:1 F mb:0 B fix frame:5 poc:65702/65702 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f60380] Adding 30170 MVs info to frame 54
+[h264 @ 0x151f60380] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f60380] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f60380] slice:1 F mb:0 P fix frame:5 poc:65712/65712 ref:1/1 qp:10 loop:1:0:0 weight:0 
+[h264 @ 0x151f1b770] Adding 44233 MVs info to frame 61
+[h264 @ 0x151f68d00] Adding 60454 MVs info to frame 55
+[h264 @ 0x151f68d00] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f68d00] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f71680] Adding 60323 MVs info to frame 56
+[h264 @ 0x151f68d00] slice:1 F mb:0 B fix frame:6 poc:65708/65708 ref:1/1 qp:13 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f71680] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f71680] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f71680] slice:1 F mb:0 B fix frame:7 poc:65706/65706 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f7a000] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f7a000] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f7a000] slice:1 F mb:0 B fix frame:7 poc:65710/65710 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f3dd80] Adding 60484 MVs info to frame 65
+[h264 @ 0x151f82980] Adding 30104 MVs info to frame 58
+[h264 @ 0x151f82980] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f82980] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f82980] slice:1 F mb:0 P fix frame:7 poc:65720/65720 ref:1/1 qp:10 loop:1:0:0 weight:0 
+[h264 @ 0x151f240f0] Adding 30131 MVs info to frame 62
+[h264 @ 0x151f129c0] Adding 60274 MVs info to frame 60
+[h264 @ 0x151f2ca70] Adding 60239 MVs info to frame 63
+[h264 @ 0x151f35520] Adding 60286 MVs info to frame 64
+[h264 @ 0x151f60380] Adding 60477 MVs info to frame 69
+[h264 @ 0x151f0a040] Adding 60375 MVs info to frame 59
+[h264 @ 0x151f0a040] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f0a040] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f0a040] slice:1 F mb:0 B fix frame:8 poc:65716/65716 ref:1/1 qp:13 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f129c0] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f129c0] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f129c0] slice:1 F mb:0 B fix frame:9 poc:65714/65714 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f1b770] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f1b770] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f1b770] slice:1 F mb:0 B fix frame:9 poc:65718/65718 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f240f0] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f240f0] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f240f0] slice:1 F mb:0 P fix frame:9 poc:65728/65728 ref:1/1 qp:11 loop:1:0:0 weight:0 
+[h264 @ 0x151f46700] Adding 30068 MVs info to frame 66
+[h264 @ 0x151f2ca70] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f2ca70] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f2ca70] slice:1 F mb:0 B fix frame:10 poc:65724/65724 ref:1/1 qp:13 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f35520] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f35520] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f35520] slice:1 F mb:0 B fix frame:11 poc:65722/65722 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f3dd80] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f3dd80] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f68d00] Adding 30191 MVs info to frame 70
+[h264 @ 0x151f3dd80] slice:1 F mb:0 B fix frame:11 poc:65726/65726 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f82980] Adding 50868 MVs info to frame 73
+[h264 @ 0x151f46700] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f46700] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f46700] slice:1 F mb:0 P fix frame:11 poc:65736/65736 ref:1/1 qp:14 loop:1:0:0 weight:0 
+[h264 @ 0x151f71680] Adding 60441 MVs info to frame 71
+[h264 @ 0x151f57a00] Adding 60464 MVs info to frame 68
+[h264 @ 0x151f4f080] Adding 60468 MVs info to frame 67
+[h264 @ 0x151f4f080] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f4f080] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f4f080] slice:1 F mb:0 B fix frame:12 poc:65732/65732 ref:1/1 qp:13 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f57a00] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f57a00] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f57a00] slice:1 F mb:0 B fix frame:13 poc:65730/65730 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f60380] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f60380] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f60380] slice:1 F mb:0 B fix frame:13 poc:65734/65734 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f7a000] Adding 60422 MVs info to frame 72
+[h264 @ 0x151f68d00] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f68d00] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f68d00] slice:1 F mb:0 P fix frame:13 poc:65740/65740 ref:1/1 qp:19 loop:1:0:0 weight:0 
+[h264 @ 0x151f71680] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f71680] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f71680] slice:1 F mb:0 B fix frame:14 poc:65738/65738 ref:1/1 qp:19 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f240f0] Adding 60341 MVs info to frame 77
+[h264 @ 0x151f7a000] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f7a000] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f7a000] slice:1 F mb:0 P fix frame:14 poc:65744/65744 ref:1/1 qp:18 loop:1:0:0 weight:0 
+[h264 @ 0x151f82980] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f82980] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f82980] slice:1 F mb:0 B fix frame:15 poc:65742/65742 ref:1/1 qp:21 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f46700] Adding 60274 MVs info to frame 81
+[h264 @ 0x151f0a040] Adding 30180 MVs info to frame 74
+[h264 @ 0x151f0a040] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f0a040] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f0a040] slice:1 F mb:0 P fix frame:15 poc:65746/65746 ref:1/1 qp:19 loop:1:0:0 weight:0 
+[h264 @ 0x151f129c0] Adding 60458 MVs info to frame 75
+[h264 @ 0x151f129c0] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f129c0] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f129c0] slice:1 F mb:0 P fix frame:0 poc:65754/65754 ref:1/1 qp:10 loop:1:0:0 weight:0 
+[h264 @ 0x151f1b770] Adding 60440 MVs info to frame 76
+[h264 @ 0x151f2ca70] Adding 30195 MVs info to frame 78
+[h264 @ 0x151f3dd80] Adding 60257 MVs info to frame 80
+[h264 @ 0x151f1b770] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f1b770] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[in#0/mpegts @ 0x600000efc600] EOF while reading input
+[in#0/mpegts @ 0x600000efc600] Terminating thread with return code 0 (success)
+[h264 @ 0x151f1b770] slice:1 F mb:0 B fix frame:1 poc:65750/65750 ref:1/1 qp:13 loop:1:0:0 weight:0 SPAT
+[aist#0:1/aac @ 0x151f07770] [dec:aac @ 0x151f8cf50] Decoder thread received EOF packet
+[aist#0:1/aac @ 0x151f07770] [dec:aac @ 0x151f8cf50] Decoder returned EOF, finishing
+[aist#0:1/aac @ 0x151f07770] [dec:aac @ 0x151f8cf50] Terminating thread with return code 0 (success)
+[h264 @ 0x151f240f0] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f240f0] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f240f0] slice:1 F mb:0 B fix frame:2 poc:65748/65748 ref:1/1 qp:21 loop:1:0:0 weight:0 SPAT
+[out_#0:1 @ 0x6000005dc160] EOF on sink link out_#0:1:default.
+[af#0:1 @ 0x6000003f0320] Filtergraph returned EOF, finishing
+[af#0:1 @ 0x6000003f0320] All consumers returned EOF
+[h264 @ 0x151f2ca70] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f2ca70] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f2ca70] slice:1 F mb:0 B fix frame:2 poc:65752/65752 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f35520] Adding 60474 MVs info to frame 79
+[aost#0:1/pcm_s16le @ 0x151f8b830] Encoder thread received EOF
+[aost#0:1/pcm_s16le @ 0x151f8b830] Terminating thread with return code 0 (success)
+[h264 @ 0x151f35520] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f35520] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[af#0:1 @ 0x6000003f0320] Terminating thread with return code 0 (success)
+[h264 @ 0x151f35520] slice:1 F mb:0 P fix frame:2 poc:65762/65762 ref:1/1 qp:11 loop:1:0:0 weight:0 
+[h264 @ 0x151f3dd80] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f4f080] Adding 30048 MVs info to frame 82
+[h264 @ 0x151f3dd80] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f3dd80] slice:1 F mb:0 B fix frame:3 poc:65758/65758 ref:1/1 qp:13 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f46700] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f46700] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f46700] slice:1 F mb:0 B fix frame:4 poc:65756/65756 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f4f080] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f4f080] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f4f080] slice:1 F mb:0 B fix frame:4 poc:65760/65760 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f60380] Adding 60477 MVs info to frame 84
+[h264 @ 0x151f57a00] Adding 60479 MVs info to frame 83
+[h264 @ 0x151f57a00] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f68d00] Adding 60485 MVs info to frame 85
+[h264 @ 0x151f57a00] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f57a00] slice:1 F mb:0 P fix frame:4 poc:65766/65766 ref:1/1 qp:11 loop:1:0:0 weight:0 
+[h264 @ 0x151f60380] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f60380] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 0
+[h264 @ 0x151f60380] slice:1 F mb:0 B fix frame:5 poc:65764/65764 ref:1/1 qp:14 loop:1:0:0 weight:0 SPAT
+[h264 @ 0x151f7a000] Adding 59726 MVs info to frame 87
+[h264 @ 0x151f68d00] nal_unit_type: 9(AUD), nal_ref_idc: 0
+[h264 @ 0x151f68d00] nal_unit_type: 1(Coded slice of a non-IDR picture), nal_ref_idc: 2
+[h264 @ 0x151f68d00] slice:1 F mb:0 P fix frame:5 poc:65768/65768 ref:1/1 qp:11 loop:1:0:0 weight:0 
+[h264 @ 0x151f71680] Adding 30227 MVs info to frame 86
+[vist#0:0/h264 @ 0x151f07600] [dec:h264 @ 0x151f092c0] Decoder thread received EOF packet
+[h264 @ 0x151f0a040] Adding 50561 MVs info to frame 89
+[h264 @ 0x151f129c0] Adding 17689 MVs info to frame 90
+[h264 @ 0x151f71680] Adding 57247 MVs info to frame 101
+[h264 @ 0x151f35520] Adding 60481 MVs info to frame 94
+[h264 @ 0x151f71680] Adding 56343 MVs info to frame 101
+[h264 @ 0x151f82980] Adding 17636 MVs info to frame 88
+[h264 @ 0x151f1b770] Adding 29326 MVs info to frame 91
+[h264 @ 0x151f240f0] Adding 60424 MVs info to frame 92
+[h264 @ 0x151f2ca70] Adding 50584 MVs info to frame 93
+[h264 @ 0x151f3dd80] Adding 28033 MVs info to frame 95
+[h264 @ 0x151f46700] Adding 60478 MVs info to frame 96
+[h264 @ 0x151f57a00] Adding 60477 MVs info to frame 98
+[h264 @ 0x151f68d00] Adding 41718 MVs info to frame 100
+[h264 @ 0x151f4f080] Adding 60448 MVs info to frame 97
+[h264 @ 0x151f60380] Adding 30146 MVs info to frame 99
+[vist#0:0/h264 @ 0x151f07600] [dec:h264 @ 0x151f092c0] Decoder returned EOF, finishing
+[vist#0:0/h264 @ 0x151f07600] [dec:h264 @ 0x151f092c0] Terminating thread with return code 0 (success)
+[out_#0:0 @ 0x6000005f8bb0] EOF on sink link out_#0:0:default.
+[vf#0:0 @ 0x6000003f0140] Filtergraph returned EOF, finishing
+[vf#0:0 @ 0x6000003f0140] All consumers returned EOF
+[vost#0:0/wrapped_avframe @ 0x151f07ec0] Encoder thread received EOF
+[vost#0:0/wrapped_avframe @ 0x151f07ec0] Terminating thread with return code 0 (success)
+[out#0/null @ 0x6000007fc000] All streams finished
+[out#0/null @ 0x6000007fc000] Terminating thread with return code 0 (success)
+[vf#0:0 @ 0x6000003f0140] Terminating thread with return code 0 (success)
+[out#0/null @ 0x6000007fc000] Output file #0 (pipe:):
+[out#0/null @ 0x6000007fc000]   Output stream #0:0 (video): 117 frames encoded; 117 packets muxed (51480 bytes); 
+[out#0/null @ 0x6000007fc000]   Output stream #0:1 (audio): 186 frames encoded (190464 samples); 186 packets muxed (761856 bytes); 
+[out#0/null @ 0x6000007fc000]   Total: 303 packets (813336 bytes) muxed
+[out#0/null @ 0x6000007fc000] video:50KiB audio:744KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown
+frame=  117 fps=0.0 q=-0.0 Lsize=N/A time=00:00:03.97 bitrate=N/A speed=  51x    
+[in#0/mpegts @ 0x600000efc600] Input file #0 (01JYZZ0BN3RX7CZYM13FCSQJKA-video-0000.ts):
+[in#0/mpegts @ 0x600000efc600]   Input stream #0:0 (video): 117 packets read (1472996 bytes); 117 frames decoded; 0 decode errors; 
+[in#0/mpegts @ 0x600000efc600]   Input stream #0:1 (audio): 186 packets read (64957 bytes); 186 frames decoded; 0 decode errors (190464 samples); 
+[in#0/mpegts @ 0x600000efc600]   Total: 303 packets (1537953 bytes) demuxed
+[AVIOContext @ 0x151f066e0] Statistics: 3426824 bytes read, 2 seeks

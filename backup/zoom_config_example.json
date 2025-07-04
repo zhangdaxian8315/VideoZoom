@@ -1,0 +1,16 @@
+{
+  "zooms": [
+    {
+      "start": 5.0,
+      "end": 11.0,
+      "center_x": 0.5,
+      "center_y": 0.5
+    },
+    {
+      "start": 15.0,
+      "end": 25.0,
+      "center_x": 0.2,
+      "center_y": 0.8
+    }
+  ]
+} 

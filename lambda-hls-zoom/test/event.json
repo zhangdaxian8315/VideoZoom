@@ -1,0 +1,11 @@
+{
+  "recordingId": "01JVC050V3GQBKTKS7JE36A6VK",
+  "manifestFileUrl": "s3://boom-alpha/hls/zoom/01JYZZ0BN3RX7CZYM13FCSQJKA/playlist.m3u8",
+  "callbackUrl": "https://httpbin.org/post",
+  "outputS3Prefix": "hls/zoom",
+  "lowQuality": true,
+  "zooms": [
+    { "start": 3.0, "end": 9.0, "x": 0.1, "y": 0.1, "zoom": 2.0 },
+    { "start": 14.0, "end": 19.0, "x": 0.9, "y": 0.9, "zoom": 2.0 }
+  ]
+}
