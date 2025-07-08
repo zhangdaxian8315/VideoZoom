@@ -1,0 +1,73 @@
+# 此 AWS SAM 模板是根据您的函数配置生成的。如果您的函数有一个或多个触发器，则请注意与这些触发器关联的 AWS 资源未在此模板中完全指定，并且 AWS
+# 资源包含占位符值。在 AWS 基础架构编辑器或您最喜欢的 IDE 中打开此模板并对其进行修改，以指定具有其他 AWS 资源的无服务器应用程序。
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: HLS Zoom Export Lambda Function
+
+Resources:
+  HlsZoomExportFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: index.handler
+      Runtime: nodejs22.x
+      Architectures:
+        - x86_64
+      MemorySize: 10240
+      Timeout: 900
+      EphemeralStorage:
+        Size: 10240
+      Environment:
+        Variables:
+          FFMPEG: /opt/bin/ffmpeg
+          S3_REGION: us-east-1
+          S3_BUCKET: boom-alpha
+      Layers:
+        - !Ref FfmpegLayer
+        - !Ref FfprobeLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+                - s3:ListBucket
+              Resource: 
+                - "arn:aws:s3:::boom-alpha"
+                - "arn:aws:s3:::boom-alpha/*"
+            - Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: "*"
+
+  FfmpegLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      ContentUri: ffmpeg-layer-x64/
+      LayerName: ffmpeg-layer-x64
+      Description: FFmpeg binary for video processing
+      CompatibleRuntimes:
+        - nodejs22.x
+        - nodejs20.x
+        - nodejs18.x
+
+  FfprobeLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      ContentUri: ffprobe/
+      LayerName: ffprobe
+      Description: FFprobe binary for video analysis
+      CompatibleRuntimes:
+        - nodejs22.x
+        - nodejs20.x
+        - nodejs18.x
+
+Outputs:
+  HlsZoomExportFunction:
+    Description: "HLS Zoom Export Lambda Function ARN"
+    Value: !GetAtt HlsZoomExportFunction.Arn
+  HlsZoomExportFunctionIamRole:
+    Description: "Implicit IAM Role created for HLS Zoom Export function"
+    Value: !GetAtt HlsZoomExportFunctionRole.Arn

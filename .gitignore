@@ -1,0 +1,51 @@
+# Sensitive files with CloudFront signatures and personal data
+event_cookie.json
+backup/**/vlc_debug.log
+backup/**/*.log
+
+# Local test files that may contain sensitive data
+test-local*.mjs
+test-local-debug.mjs
+
+# Any files with real AWS credentials or CloudFront signatures
+*real*.json
+*production*.json
+*credential*.json
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+/tmp/
+
+# Large video files and test data
+*.mp4
+*.ts
+*.m3u8
+backup/**/*.ts
+backup/**/*.m3u8
+backup/**/*.mp4
+
+# AWS credentials
+credentials
+config
+*.pem
+*.key 
