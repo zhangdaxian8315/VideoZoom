@@ -82,27 +82,58 @@ export const handler = async (event) => {
       console.log("📄 Playlist 内容预览:", playlistContent.substring(0, 200) + "...");
     }
   
-    // 2. 执行 Zoom 处理
-    console.log("🎬 开始 Zoom 处理...");
-    await processZoom({
-      inputDir: segDir,
-      outputDir,
-      playlistPath,
-      recordingId: spec.recordingId,
-      zooms: spec.zooms,
-      lowQuality: spec.lowQuality === 'true' ? true : false,
-      spec,
-    });
-    console.log("✅ Zoom 处理完成");
+    // 2. 执行处理逻辑（互斥：trims 或 zooms）
+    if (spec.trims && spec.trims.length > 0) {
+      console.log("✂️ 开始 Trim 处理...");
+      await processTrim({
+        inputDir: segDir,
+        outputDir,
+        playlistPath,
+        recordingId: spec.recordingId,
+        trims: spec.trims,
+        lowQuality: spec.lowQuality === 'true' ? true : false,
+        spec,
+      });
+      console.log("✅ Trim 处理完成");
+    } else if (spec.zooms && spec.zooms.length > 0) {
+      console.log("🎬 开始 Zoom 处理...");
+      await processZoom({
+        inputDir: segDir,
+        outputDir,
+        playlistPath,
+        recordingId: spec.recordingId,
+        zooms: spec.zooms,
+        lowQuality: spec.lowQuality === 'true' ? true : false,
+        spec,
+      });
+      console.log("✅ Zoom 处理完成");
+    } else {
+      console.log("📋 没有处理参数，直接拷贝原始文件...");
+      await copyOriginalFiles(segDir, outputDir);
+      console.log("✅ 文件拷贝完成");
+    }
   
     // ✅ 构造回调 JSON
     const resultPayload = {
       status: "success",
       recordingId: spec.recordingId,
       outputMp4: `${spec.outputS3Prefix}/${spec.recordingId}.mp4`,
-      outputHls: `${spec.outputS3Prefix}/${spec.recordingId}_zoomed/playlist.m3u8`,
-      zooms: spec.zooms,
     };
+
+    // 根据实际使用的功能设置不同的回调数据
+    if (spec.trims && spec.trims.length > 0) {
+      // Trim 功能的回调数据
+      resultPayload.outputHls = `${spec.outputS3Prefix}/${spec.recordingId}_trimmed/playlist.m3u8`;
+      resultPayload.trims = spec.trims;
+      resultPayload.totalDuration = spec.trims.reduce((total, trim) => total + (trim.end - trim.start), 0);
+    } else if (spec.zooms && spec.zooms.length > 0) {
+      // Zoom 功能的回调数据
+      resultPayload.outputHls = `${spec.outputS3Prefix}/${spec.recordingId}_zoomed/playlist.m3u8`;
+      resultPayload.zooms = spec.zooms;
+    } else {
+      // 无处理功能的回调数据
+      resultPayload.outputHls = `${spec.outputS3Prefix}/${spec.recordingId}/playlist.m3u8`;
+    }
   
     if (spec.callbackUrl) {
       console.log("📤 准备回调成功结果:", resultPayload);
@@ -134,18 +165,18 @@ export const handler = async (event) => {
   
     return error(500, err.message);
   } finally {
-    console.log("🧹 清理临时文件...");
-    try {
-      await rm(workDir, { recursive: true, force: true });
-    } catch (e) {
-      console.log("⚠️ 清理 workDir 失败:", e.message);
-    }
-    try {
-      await rm(outputDir, { recursive: true, force: true });
-    } catch (e) {
-      console.log("⚠️ 清理 outputDir 失败:", e.message);
-    }
-    console.log("✅ 清理完成");
+    // console.log("🧹 清理临时文件...");
+    // try {
+    //   await rm(workDir, { recursive: true, force: true });
+    // } catch (e) {
+    //   console.log("⚠️ 清理 workDir 失败:", e.message);
+    // }
+    // try {
+    //   await rm(outputDir, { recursive: true, force: true });
+    // } catch (e) {
+    //   console.log("⚠️ 清理 outputDir 失败:", e.message);
+    // }
+    // console.log("✅ 清理完成");
   }  
 };
 
@@ -167,8 +198,19 @@ function parsePayload(raw) {
   
   console.log("✅ 所有必需字段检查通过");
   
-  // 🔍 新增：Zoom 参数校验
-  if (body.zooms && Array.isArray(body.zooms)) {
+  // 🔍 参数校验和互斥逻辑
+  if (body.trims && Array.isArray(body.trims) && body.trims.length > 0) {
+    // 如果有 trims，校验 trims 参数
+    validateTrimParameters(body.trims);
+    console.log("✅ Trim 参数校验通过");
+    
+    // 互斥逻辑：有 trims 时忽略 zooms
+    if (body.zooms) {
+      console.log("⚠️ 检测到 trims 和 zooms 同时存在，优先处理 trims，忽略 zooms");
+      delete body.zooms;
+    }
+  } else if (body.zooms && Array.isArray(body.zooms)) {
+    // 没有 trims 时，校验 zooms 参数
     validateZoomParameters(body.zooms);
     console.log("✅ Zoom 参数校验通过");
   }
@@ -180,6 +222,32 @@ function badRequest(msg) {
   const e = new Error(msg);
   e.statusCode = 400;
   return e;
+}
+
+// 🔍 Trim 参数校验函数
+function validateTrimParameters(trims) {
+  trims.forEach((trim, index) => {
+    // 校验 start 和 end 参数（时间范围）
+    if (trim.start === undefined || trim.end === undefined) {
+      console.error(`❌ Trim 缺少 start/end 参数 (索引: ${index})`);
+      throw badRequest(`Trim must have both start and end, missing in trim at index ${index}`);
+    }
+    
+    if (typeof trim.start !== 'number' || typeof trim.end !== 'number') {
+      console.error(`❌ Trim start/end 参数类型错误: start=${trim.start}, end=${trim.end} (索引: ${index})`);
+      throw badRequest(`Trim start and end must be numbers, got: start=${trim.start}, end=${trim.end} at index ${index}`);
+    }
+    
+    if (trim.start >= trim.end) {
+      console.error(`❌ Trim start 必须小于 end: start=${trim.start}, end=${trim.end} (索引: ${index})`);
+      throw badRequest(`Trim start must be less than end, got: start=${trim.start}, end=${trim.end} at index ${index}`);
+    }
+    
+    if (trim.start < 0 || trim.end < 0) {
+      console.error(`❌ Trim start/end 不能为负数: start=${trim.start}, end=${trim.end} (索引: ${index})`);
+      throw badRequest(`Trim start and end must be non-negative, got: start=${trim.start}, end=${trim.end} at index ${index}`);
+    }
+  });
 }
 
 // 🔍 Zoom 参数校验函数
@@ -311,6 +379,16 @@ async function downloadFile(url, dest) {
   console.log(`✅ 下载完成: ${dest}`);
 }
 
+// 🔍 拷贝原始文件函数（无处理情况）
+async function copyOriginalFiles(inputDir, outputDir) {
+  const inputFiles = await readdir(inputDir);
+  for (const file of inputFiles) {
+    const sourcePath = join(inputDir, file);
+    const destPath = join(outputDir, file);
+    await cp(sourcePath, destPath);
+  }
+}
+
 async function uploadFolderToS3(folder, s3Prefix) {
   const entries = await readdir(folder);
   for (const name of entries) {
@@ -321,6 +399,192 @@ async function uploadFolderToS3(folder, s3Prefix) {
       Key: `${s3Prefix}/${name}`,
       Body: fileData,
     }));
+  }
+}
+
+// 🔍 Trim 处理函数
+async function processTrim({ inputDir, outputDir, playlistPath, recordingId, trims, lowQuality, spec }) {
+  console.log("✂️ 开始多段Trim处理...");
+  console.log("📊 参数:", { trims, lowQuality });
+
+  const tempDir = `/tmp/trim_${recordingId}`;
+  await mkdir(tempDir, { recursive: true });
+
+  try {
+    // 0. 拷贝所有原始文件到输出目录
+    console.log("📋 拷贝原始文件到输出目录...");
+    const inputFiles = await readdir(inputDir);
+    for (const file of inputFiles) {
+      const sourcePath = join(inputDir, file);
+      const destPath = join(outputDir, file);
+      await cp(sourcePath, destPath);
+    }
+    console.log("✅ 原始文件拷贝完成");
+
+    // 1. 解析M3U8播放列表，提取分片信息
+    const playlistContent = await readFile(playlistPath, 'utf8');
+    const lines = playlistContent.split('\n');
+    const segmentInfo = [];
+    let currentTime = 0;
+    let segmentIndex = 0;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (line.startsWith('#EXTINF:')) {
+        const duration = parseFloat(line.match(/#EXTINF:([0-9]+\.?[0-9]*),/)[1]);
+        const nextLine = lines[i + 1]?.trim();
+        if (nextLine && nextLine.endsWith('.ts')) {
+          const startTime = currentTime;
+          const endTime = currentTime + duration;
+          segmentInfo.push({
+            index: segmentIndex,
+            filename: nextLine,
+            duration,
+            startTime,
+            endTime
+          });
+          currentTime = endTime;
+          segmentIndex++;
+        }
+      }
+    }
+
+    // 2. 处理每个 trim 区间
+    const trimmedSegments = [];
+    for (let trimIndex = 0; trimIndex < trims.length; trimIndex++) {
+      const { start, end } = trims[trimIndex];
+      
+      // 找到与trim区间重叠的分片
+      const overlappingSegs = segmentInfo.filter(seg => seg.endTime > start && seg.startTime < end);
+      if (overlappingSegs.length === 0) {
+        console.warn(`⚠️ Trim区间 ${trimIndex} (${start}s-${end}s) 没有找到重叠的分片`);
+        continue;
+      }
+
+      console.log(`✂️ 处理 Trim 区间 ${trimIndex}: ${start}s → ${end}s`);
+      
+      // 合并重叠分片
+      const concatList = overlappingSegs.map(seg => `file '${join(inputDir, seg.filename)}'`).join('\n');
+      const concatListPath = join(tempDir, `concat_list_${trimIndex}.txt`);
+      await writeFile(concatListPath, concatList);
+      
+      const mergedInputPath = join(tempDir, `merged_input_${trimIndex}.ts`);
+      await new Promise((resolve, reject) => {
+        ffmpeg()
+          .input(concatListPath)
+          .inputOptions(['-f', 'concat', '-safe', '0'])
+          .outputOptions(['-c', 'copy'])
+          .output(mergedInputPath)
+          .on('end', resolve)
+          .on('error', reject)
+          .run();
+      });
+
+      // 计算相对于合并分片的trim时间
+      const firstSegStartTime = overlappingSegs[0].startTime;
+      const relativeStart = Math.max(0, start - firstSegStartTime);
+      const relativeEnd = end - firstSegStartTime;
+      
+      // 精确时间裁剪
+      const duration = relativeEnd - relativeStart;
+      console.log(`✂️ 时间裁剪: ${relativeStart.toFixed(3)}s → ${relativeEnd.toFixed(3)}s (${duration.toFixed(3)}s)`);
+      
+      const trimmedPath = join(tempDir, `trimmed_${trimIndex}.ts`);
+      await new Promise((resolve, reject) => {
+        ffmpeg()
+          .input(mergedInputPath)
+          .outputOptions([
+            '-ss', relativeStart.toString(),         // ✅ 输出级裁剪（更精确）
+            '-t', (relativeEnd - relativeStart).toString(),
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast',
+            '-crf', lowQuality ? '23' : '18',
+            '-c:a', 'aac',
+            '-movflags', '+faststart'
+          ])
+          .output(trimmedPath)
+          .on('end', resolve)
+          .on('error', reject)
+          .run();
+      });      
+
+      trimmedSegments.push({
+        path: trimmedPath,
+        duration: duration
+      });
+      
+      console.log(`✅ Trim ${trimIndex} 完成: ${duration.toFixed(3)}秒`);
+    }
+
+    // 3. 拼接所有trim片段
+    const outputPlaylistPath = join(outputDir, 'playlist.m3u8');
+    
+    if (trimmedSegments.length > 0) {
+      const finalConcatList = trimmedSegments.map(seg => `file '${seg.path}'`).join('\n');
+      const finalConcatListPath = join(tempDir, 'final_concat_list.txt');
+      await writeFile(finalConcatListPath, finalConcatList);
+      
+      const finalOutputPath = join(outputDir, 'trimmed.ts');
+      await new Promise((resolve, reject) => {
+        ffmpeg()
+          .input(finalConcatListPath)
+          .inputOptions(['-f', 'concat', '-safe', '0'])
+          .outputOptions(['-c', 'copy'])
+          .output(finalOutputPath)
+          .on('end', resolve)
+          .on('error', reject)
+          .run();
+      });
+
+      // 4. 重建 playlist.m3u8
+      const totalDuration = trimmedSegments.reduce((sum, seg) => sum + seg.duration, 0);
+      
+      const newPlaylist = [
+        '#EXTM3U',
+        '#EXT-X-VERSION:6',
+        '#EXT-X-TARGETDURATION:' + Math.ceil(totalDuration),
+        '#EXT-X-MEDIA-SEQUENCE:0',
+        '#EXT-X-INDEPENDENT-SEGMENTS',
+        `#EXTINF:${totalDuration.toFixed(6)},`,
+        'trimmed.ts',
+        '#EXT-X-ENDLIST'
+      ].join('\n');
+      
+      await writeFile(outputPlaylistPath, newPlaylist);
+      console.log('✅ Trim处理完成！');
+    } else {
+      // 如果没有成功的trim片段，创建一个空的playlist
+      const emptyPlaylist = [
+        '#EXTM3U',
+        '#EXT-X-VERSION:6',
+        '#EXT-X-TARGETDURATION:1',
+        '#EXT-X-MEDIA-SEQUENCE:0',
+        '#EXT-X-INDEPENDENT-SEGMENTS',
+        '#EXT-X-ENDLIST'
+      ].join('\n');
+      
+      await writeFile(outputPlaylistPath, emptyPlaylist);
+      console.log('⚠️ 没有成功的trim片段，创建空playlist');
+    }
+
+    // 上传 Trim 后的 HLS 文件夹
+    const hlsOutputPrefix = `${spec.outputS3Prefix}/${spec.recordingId}_trimmed`;
+    console.log('📤 开始上传HLS到S3...', hlsOutputPrefix);
+    await uploadFolderToS3(outputDir, hlsOutputPrefix);
+    console.log('✅ HLS上传完成:', hlsOutputPrefix);
+
+    // 自动导出MP4
+    const outputMp4 = join(outputDir, `${recordingId}.mp4`);
+    await runFfmpeg(outputPlaylistPath, outputMp4);
+    console.log('✅ MP4导出完成:', outputMp4);
+    
+    // 上传MP4到S3
+    console.log('📤 开始上传MP4到S3...');
+    await uploadMp4ToS3(outputMp4, spec);
+    console.log('✅ MP4上传完成:', `${spec.outputS3Prefix}/${spec.recordingId}.mp4`);
+  } finally {
+    try { 
+      await rm(tempDir, { recursive: true, force: true }); 
+    } catch {}
   }
 }
 
@@ -513,7 +777,9 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
     await uploadMp4ToS3(outputMp4, spec);
     console.log('✅ MP4上传完成:', `${spec.outputS3Prefix}/${spec.recordingId}.mp4`);
   } finally {
-    try { await rm(tempDir, { recursive: true, force: true }); } catch {}
+    try { 
+      await rm(tempDir, { recursive: true, force: true }); 
+    } catch {}
   }
 }
 
