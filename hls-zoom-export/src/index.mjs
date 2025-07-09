@@ -67,22 +67,22 @@ export const handler = async (event) => {
     await mkdir(segDir, { recursive: true });
     await mkdir(outputDir, { recursive: true });
     console.log("✅ 目录创建成功");
-
+  
     // 1. 下载并构建本地 HLS - CloudFront方式
     console.log("📥 开始下载 HLS 文件...");
     await buildLocalPlaylist(spec.manifestFileUrl, segDir, playlistPath, spec.cloudFrontVideoCookie);
     console.log("✅ HLS 下载完成");
-
-    // // 检查下载的文件
+  
+    // 检查下载的文件
     const files = await readdir(segDir);
     console.log("📋 下载的文件列表:", files);
-    
+  
     if (files.length > 0) {
       const playlistContent = await readFile(playlistPath, 'utf8');
       console.log("📄 Playlist 内容预览:", playlistContent.substring(0, 200) + "...");
     }
-
-    // 2. 执行 Zoom 处理 - 暂时注释掉
+  
+    // 2. 执行 Zoom 处理
     console.log("🎬 开始 Zoom 处理...");
     await processZoom({
       inputDir: segDir,
@@ -94,15 +94,44 @@ export const handler = async (event) => {
       spec,
     });
     console.log("✅ Zoom 处理完成");
-    
-
-    // 3. HLS文件夹不需要上传到S3，只上传MP4
-    console.log("📝 HLS文件处理完成，仅上传MP4到S3");
+  
+    // ✅ 构造回调 JSON
+    const resultPayload = {
+      status: "success",
+      recordingId: spec.recordingId,
+      outputMp4: `${spec.outputS3Prefix}/${spec.recordingId}.mp4`,
+      outputHls: `${spec.outputS3Prefix}/${spec.recordingId}_zoomed/playlist.m3u8`,
+      zooms: spec.zooms,
+    };
+  
+    if (spec.callbackUrl) {
+      console.log("📤 准备回调成功结果:", resultPayload);
+      try {
+        await httpPost(spec.callbackUrl, resultPayload);
+        console.log("✅ 成功回调 callbackUrl");
+      } catch (callbackErr) {
+        console.warn("⚠️ 回调失败:", callbackErr.message);
+      }
+    }
+    return ok(resultPayload);
+  
   } catch (err) {
     console.error("❌ 执行失败", err);
-    // if (spec?.callbackUrl) {
-    //   httpPost(spec.callbackUrl, { status: "FAILED", reason: err.message }).catch(() => {});
-    // }
+
+    if (spec?.callbackUrl) {
+      const errorPayload = {
+        status: "failed",
+        recordingId: spec.recordingId,
+        reason: err.message || "Unknown error",
+      };
+      try {
+        console.log("📤 准备回调失败状态:", errorPayload);
+        await httpPost(spec.callbackUrl, errorPayload);
+      } catch (callbackErr) {
+        console.warn("⚠️ 回调失败状态时出错:", callbackErr.message);
+      }
+    }
+  
     return error(500, err.message);
   } finally {
     console.log("🧹 清理临时文件...");
@@ -117,7 +146,7 @@ export const handler = async (event) => {
       console.log("⚠️ 清理 outputDir 失败:", e.message);
     }
     console.log("✅ 清理完成");
-  }
+  }  
 };
 
 function parsePayload(raw) {
@@ -409,6 +438,12 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
     await writeFile(outputPlaylistPath, newLines.join('\n'));
     console.log('✅ 多段Zoom处理完成！');
 
+    // 上传 Zoom 后的 HLS 文件夹
+    const hlsOutputPrefix = `${spec.outputS3Prefix}/${spec.recordingId}_zoomed`;
+    console.log('📤 开始上传HLS到S3...', hlsOutputPrefix);
+    await uploadFolderToS3(outputDir, hlsOutputPrefix);
+    console.log('✅ HLS上传完成:', hlsOutputPrefix);
+
     // 自动导出MP4
     const outputMp4 = join(outputDir, `${recordingId}.mp4`);
     await runFfmpeg(outputPlaylistPath, outputMp4);
@@ -486,6 +521,37 @@ async function uploadMp4ToS3(path, spec) {
       ContentDisposition: `attachment; filename="${spec.recordingId}.mp4"`,
     })
   );
+}
+
+function httpPost(urlStr, payload) {
+  return new Promise((resolve, reject) => {
+    const data = Buffer.from(JSON.stringify(payload));
+    const u = new URL(urlStr);
+    const req = https.request(
+      {
+        hostname: u.hostname,
+        path: u.pathname + u.search,
+        protocol: u.protocol,
+        method: "POST",
+        port: u.port || (u.protocol === "https:" ? 443 : 80),
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": data.length,
+        },
+      },
+      (res) => {
+        res.on("data", () => {});
+        res.on("end", () =>
+          res.statusCode && res.statusCode >= 200 && res.statusCode < 400
+            ? resolve()
+            : reject(new Error(`callback → ${res.statusCode}`))
+        );
+      }
+    );
+    req.on("error", reject);
+    req.write(data);
+    req.end();
+  });
 }
 
 const ok = (body) => ({ statusCode: 200, body: JSON.stringify(body) });
