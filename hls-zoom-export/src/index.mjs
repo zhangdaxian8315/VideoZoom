@@ -166,6 +166,13 @@ function parsePayload(raw) {
   }
   
   console.log("✅ 所有必需字段检查通过");
+  
+  // 🔍 新增：Zoom 参数校验
+  if (body.zooms && Array.isArray(body.zooms)) {
+    validateZoomParameters(body.zooms);
+    console.log("✅ Zoom 参数校验通过");
+  }
+  
   return body;
 }
 
@@ -173,6 +180,58 @@ function badRequest(msg) {
   const e = new Error(msg);
   e.statusCode = 400;
   return e;
+}
+
+// 🔍 Zoom 参数校验函数
+function validateZoomParameters(zooms) {
+  zooms.forEach((zoom, index) => {
+    // 校验 start 和 end 参数（时间范围）
+    if (zoom.start !== undefined && zoom.end !== undefined) {
+      if (typeof zoom.start !== 'number' || typeof zoom.end !== 'number') {
+        console.error(`❌ Start/End 参数类型错误: start=${zoom.start}, end=${zoom.end} (索引: ${index})`);
+        throw badRequest(`Start and end must be numbers, got: start=${zoom.start}, end=${zoom.end} at index ${index}`);
+      }
+      if (zoom.start >= zoom.end) {
+        console.error(`❌ Start 必须小于 End: start=${zoom.start}, end=${zoom.end} (索引: ${index})`);
+        throw badRequest(`Start time must be less than end time, got: start=${zoom.start}, end=${zoom.end} at index ${index}`);
+      }
+      if (zoom.start < 0 || zoom.end < 0) {
+        console.error(`❌ Start/End 不能为负数: start=${zoom.start}, end=${zoom.end} (索引: ${index})`);
+        throw badRequest(`Start and end times must be non-negative, got: start=${zoom.start}, end=${zoom.end} at index ${index}`);
+      }
+    }
+    
+    // 校验 x 和 y 参数（坐标范围）
+    if (zoom.x !== undefined) {
+      if (typeof zoom.x !== 'number' || zoom.x < 0.0 || zoom.x > 1.0) {
+        console.error(`❌ X 坐标超出范围: ${zoom.x} (索引: ${index})`);
+        throw badRequest(`X coordinate must be between 0.0 and 1.0, got: ${zoom.x} at index ${index}`);
+      }
+    }
+    
+    if (zoom.y !== undefined) {
+      if (typeof zoom.y !== 'number' || zoom.y < 0.0 || zoom.y > 1.0) {
+        console.error(`❌ Y 坐标超出范围: ${zoom.y} (索引: ${index})`);
+        throw badRequest(`Y coordinate must be between 0.0 and 1.0, got: ${zoom.y} at index ${index}`);
+      }
+    }
+    
+    // 校验 zoom 参数（放大倍数）
+    if (zoom.zoom !== undefined) {
+      if (typeof zoom.zoom !== 'number' || zoom.zoom < 1.0 || zoom.zoom > 4.0) {
+        console.error(`❌ Zoom factor 超出范围: ${zoom.zoom} (索引: ${index})`);
+        throw badRequest(`Zoom factor must be between 1.0 and 4.0, got: ${zoom.zoom} at index ${index}`);
+      }
+    }
+    
+    // 校验 zoomDuration 参数（动画时长）
+    if (zoom.zoomDuration !== undefined) {
+      if (typeof zoom.zoomDuration !== 'number' || zoom.zoomDuration < 0.5 || zoom.zoomDuration > 5.0) {
+        console.error(`❌ Zoom duration 超出范围: ${zoom.zoomDuration} (索引: ${index})`);
+        throw badRequest(`Zoom duration must be between 0.5 and 5.0 seconds, got: ${zoom.zoomDuration} at index ${index}`);
+      }
+    }
+  });
 }
 
 // ✅ 通用 S3 地址解析器：支持 s3:// 和 https:// 格式
