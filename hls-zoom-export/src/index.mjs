@@ -413,32 +413,7 @@ async function processTrimFast({ inputDir, outputDir, playlistPath, recordingId,
 
   try {
     // 0. 先解析M3U8播放列表，确定需要哪些分片
-    console.log("📋 解析M3U8播放列表，确定需要的分片...");
-    const playlistContent = await readFile(playlistPath, 'utf8');
-    const lines = playlistContent.split('\n');
-    const segmentInfo = [];
-    let currentTime = 0;
-    let segmentIndex = 0;
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (line.startsWith('#EXTINF:')) {
-        const duration = parseFloat(line.match(/#EXTINF:([0-9]+\.?[0-9]*),/)[1]);
-        const nextLine = lines[i + 1]?.trim();
-        if (nextLine && nextLine.endsWith('.ts')) {
-          const startTime = currentTime;
-          const endTime = currentTime + duration;
-          segmentInfo.push({
-            index: segmentIndex,
-            filename: nextLine,
-            duration,
-            startTime,
-            endTime
-          });
-          currentTime = endTime;
-          segmentIndex++;
-        }
-      }
-    }
+    const segmentInfo = await parseM3U8Segments(playlistPath);
 
     // 1. 确定需要的分片文件并拷贝到输出目录
     const neededSegments = new Set();
@@ -474,31 +449,6 @@ async function processTrimFast({ inputDir, outputDir, playlistPath, recordingId,
         console.warn(`⚠️ Trim区间 ${trimIndex} (${start}s-${end}s) 没有找到重叠的分片`);
         continue;
       }
-
-      console.log(`⚡ 高效处理 Trim 区间 ${trimIndex}: ${start}s → ${end}s`);
-      
-      // 🔍 识别分片阶段 - 分析每个分片的处理策略
-      console.log(`📋 分析区间 ${trimIndex} 中的 ${overlappingSegs.length} 个重叠分片:`);
-      overlappingSegs.forEach((seg, i) => {
-        const isFirst = i === 0;
-        const isLast = i === overlappingSegs.length - 1;
-        const segStart = Math.max(seg.startTime, start);
-        const segEnd = Math.min(seg.endTime, end);
-        
-        if (isFirst && isLast) {
-          // 只有一个分片，需要双边裁剪
-          console.log(`✂️ 分片 ${seg.filename} 与起始和结束时间都重叠，将进行双边裁剪 (裁剪范围: ${(segStart - seg.startTime).toFixed(1)}s - ${(segEnd - seg.startTime).toFixed(1)}s)`);
-        } else if (isFirst && seg.startTime < start) {
-          // 第一个分片，需要裁剪开始部分
-          console.log(`✂️ 分片 ${seg.filename} 与起始时间重叠，将进行部分裁剪 (裁剪范围: ${(segStart - seg.startTime).toFixed(1)}s - ${seg.duration.toFixed(1)}s)`);
-        } else if (isLast && seg.endTime > end) {
-          // 最后一个分片，需要裁剪结束部分
-          console.log(`✂️ 分片 ${seg.filename} 与结束时间重叠，将进行部分裁剪 (裁剪范围: 0s - ${(segEnd - seg.startTime).toFixed(1)}s)`);
-        } else {
-          // 中间完整分片，直接复用
-          console.log(`✅ 分片 ${seg.filename} 完全位于裁剪区间内，将直接合并`);
-        }
-      });
 
       // 🎬 处理当前区间的每个分片，生成独立的TS文件
       for (let i = 0; i < overlappingSegs.length; i++) {
@@ -681,49 +631,13 @@ async function processTrimFast({ inputDir, outputDir, playlistPath, recordingId,
       console.log('🎬 第二步：合并分片为连续MP4...');
       const mergedMp4Path = join(outputDir, 'merged_continuous.mp4');
       
-      await new Promise((resolve, reject) => {
-        ffmpeg()
-          .input(concatListPath)
-          .inputOptions(['-f', 'concat', '-safe', '0'])
-          .outputOptions([
-            '-c', 'copy',
-            '-fflags', '+genpts',
-            '-avoid_negative_ts', 'make_zero'
-          ])
-          .output(mergedMp4Path)
-          .on('start', (cmd) => console.log('[ffmpeg merge]', cmd))
-          .on('end', () => {
-            console.log('✅ MP4合并完成，时间戳已连续化');
-            resolve();
-          })
-          .on('error', reject)
-          .run();
-      });
+      await mergeMP4WithTimestampOptimization(concatListPath, mergedMp4Path);
       
       // 第三步：将连续MP4重新切分成标准TS分片
       console.log('✂️ 第三步：重新切分为标准HLS分片...');
       const finalPlaylistPath = join(outputDir, 'final_playlist.m3u8');
       
-      await new Promise((resolve, reject) => {
-        ffmpeg()
-          .input(mergedMp4Path)
-          .outputOptions([
-            '-c', 'copy',
-            '-f', 'hls',
-            '-hls_time', '4',
-            '-hls_segment_type', 'mpegts',
-            '-hls_segment_filename', join(outputDir, 'segment_%03d.ts'),
-            '-hls_playlist_type', 'vod'
-          ])
-          .output(finalPlaylistPath)
-          .on('start', (cmd) => console.log('[ffmpeg hls]', cmd))
-          .on('end', () => {
-            console.log('✅ HLS重新切分完成，播放连续性已优化');
-            resolve();
-          })
-          .on('error', reject)
-          .run();
-      });
+      await convertMP4ToHLS(mergedMp4Path, finalPlaylistPath, outputDir);
       
       // 第四步：替换原播放列表
       console.log('🔄 第四步：更新播放列表...');
@@ -745,7 +659,7 @@ async function processTrimFast({ inputDir, outputDir, playlistPath, recordingId,
     await uploadFolderToS3(outputDir, hlsOutputPrefix);
     console.log('✅ HLS上传完成:', hlsOutputPrefix);
 
-        // 4. 自动导出MP4 - 基于新的分片架构
+    // 4. 自动导出MP4
     const outputMp4 = join(outputDir, `${recordingId}.mp4`);
     console.log('🎬 开始导出MP4...');
     const concatListPath = await generateConcatList(outputPlaylistPath, outputDir);
@@ -783,31 +697,7 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
     console.log("✅ 原始文件拷贝完成");
 
     // 1. 解析M3U8播放列表，提取分片信息
-    const playlistContent = await readFile(playlistPath, 'utf8');
-    const lines = playlistContent.split('\n');
-    const segmentInfo = [];
-    let currentTime = 0;
-    let segmentIndex = 0;
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (line.startsWith('#EXTINF:')) {
-        const duration = parseFloat(line.match(/#EXTINF:([0-9]+\.?[0-9]*),/)[1]);
-        const nextLine = lines[i + 1]?.trim();
-        if (nextLine && nextLine.endsWith('.ts')) {
-          const startTime = currentTime;
-          const endTime = currentTime + duration;
-          segmentInfo.push({
-            index: segmentIndex,
-            filename: nextLine,
-            duration,
-            startTime,
-            endTime
-          });
-          currentTime = endTime;
-          segmentIndex++;
-        }
-      }
-    }
+    const segmentInfo = await parseM3U8Segments(playlistPath);
 
     // 2. 计算所有zoom区间对应的分片索引范围
     const zoomSegments = zooms.map((zoom, idx) => {
@@ -904,6 +794,8 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
     // 4. playlist重建
     const outputPlaylistPath = join(outputDir, 'playlist.m3u8');
     // 收集头部字段
+    const playlistContent = await readFile(playlistPath, 'utf8');
+    const lines = playlistContent.split('\n');
     const headerLines = [];
     for (const line of lines) {
       if (line.startsWith('#EXTINF')) break;
@@ -1090,6 +982,86 @@ function httpPost(urlStr, payload) {
     req.on("error", reject);
     req.write(data);
     req.end();
+  });
+}
+
+// 🔧 封装函数：解析M3U8播放列表，提取分片信息
+async function parseM3U8Segments(playlistPath) {
+  console.log("📋 解析M3U8播放列表，提取分片信息...");
+  const playlistContent = await readFile(playlistPath, 'utf8');
+  const lines = playlistContent.split('\n');
+  const segmentInfo = [];
+  let currentTime = 0;
+  let segmentIndex = 0;
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line.startsWith('#EXTINF:')) {
+      const duration = parseFloat(line.match(/#EXTINF:([0-9]+\.?[0-9]*),/)[1]);
+      const nextLine = lines[i + 1]?.trim();
+      if (nextLine && nextLine.endsWith('.ts')) {
+        const startTime = currentTime;
+        const endTime = currentTime + duration;
+        segmentInfo.push({
+          index: segmentIndex,
+          filename: nextLine,
+          duration,
+          startTime,
+          endTime
+        });
+        currentTime = endTime;
+        segmentIndex++;
+      }
+    }
+  }
+  
+  console.log(`✅ 解析完成，共找到 ${segmentInfo.length} 个分片`);
+  return segmentInfo;
+}
+
+// 🔧 封装函数：合并MP4并做时间戳优化
+async function mergeMP4WithTimestampOptimization(concatListPath, outputPath) {
+  return new Promise((resolve, reject) => {
+    ffmpeg()
+      .input(concatListPath)
+      .inputOptions(['-f', 'concat', '-safe', '0'])
+      .outputOptions([
+        '-c', 'copy',
+        '-fflags', '+genpts',
+        '-avoid_negative_ts', 'make_zero'
+      ])
+      .output(outputPath)
+      .on('start', (cmd) => console.log('[ffmpeg merge]', cmd))
+      .on('end', () => {
+        console.log('✅ MP4合并完成，时间戳已连续化');
+        resolve();
+      })
+      .on('error', reject)
+      .run();
+  });
+}
+
+// 🔧 封装函数：MP4切分HLS
+async function convertMP4ToHLS(inputMP4Path, outputPlaylistPath, outputDir) {
+  return new Promise((resolve, reject) => {
+    ffmpeg()
+      .input(inputMP4Path)
+      .outputOptions([
+        '-c', 'copy',
+        '-f', 'hls',
+        '-hls_time', '4',
+        '-hls_segment_type', 'mpegts',
+        '-hls_segment_filename', join(outputDir, 'segment_%03d.ts'),
+        '-hls_playlist_type', 'vod'
+      ])
+      .output(outputPlaylistPath)
+      .on('start', (cmd) => console.log('[ffmpeg hls]', cmd))
+      .on('end', () => {
+        console.log('✅ HLS重新切分完成，播放连续性已优化');
+        resolve();
+      })
+      .on('error', reject)
+      .run();
   });
 }
 
