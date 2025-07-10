@@ -434,138 +434,13 @@ async function processTrimFast({ inputDir, outputDir, playlistPath, recordingId,
     console.log(`✅ 拷贝完成，共拷贝 ${neededSegments.size} 个分片文件`);
 
     // 2. 高效处理每个 trim 区间 - 新架构：输出独立TS分片
-    const finalSegmentList = []; // 存储所有最终的分片信息 {filename, duration, path}
-    let segmentCounter = 0; // 全局分片计数器
-    
-    for (let trimIndex = 0; trimIndex < trims.length; trimIndex++) {
-      const { start, end } = trims[trimIndex];
-      
-      // 🚀 开始执行时的日志
-      console.log(`🚀 正在执行精确裁剪 processTrimFast，目标区间: [${start}s, ${end}s]`);
-      
-      // 找到与trim区间重叠的分片
-      const overlappingSegs = segmentInfo.filter(seg => seg.endTime > start && seg.startTime < end);
-      if (overlappingSegs.length === 0) {
-        console.warn(`⚠️ Trim区间 ${trimIndex} (${start}s-${end}s) 没有找到重叠的分片`);
-        continue;
-      }
-
-      // 🎬 处理当前区间的每个分片，生成独立的TS文件
-      for (let i = 0; i < overlappingSegs.length; i++) {
-        const seg = overlappingSegs[i];
-        const isFirst = i === 0;
-        const isLast = i === overlappingSegs.length - 1;
-        
-        // 判断分片的处理类型
-        const segStart = Math.max(seg.startTime, start);
-        const segEnd = Math.min(seg.endTime, end);
-        const segDuration = segEnd - segStart;
-        
-        if (isFirst && isLast) {
-          // 只有一个分片，需要裁剪开始和结束
-          const outputFileName = `seg${String(segmentCounter++).padStart(5, '0')}_trim.ts`;
-          const outputPath = join(outputDir, outputFileName);
-          console.log(`🛠️ 正在裁剪分片 ${seg.filename}，裁剪范围: ${(segStart - seg.startTime).toFixed(1)}s - ${(segEnd - seg.startTime).toFixed(1)}s`);
-          await new Promise((resolve, reject) => {
-            ffmpeg()
-              .input(join(inputDir, seg.filename))
-              .outputOptions([
-                '-ss', (segStart - seg.startTime).toString(),
-                '-t', segDuration.toString(),
-                '-c:v', 'libx264',
-                '-preset', 'ultrafast',
-                '-crf', lowQuality ? '23' : '18',
-                '-c:a', 'aac',
-                '-movflags', '+faststart'
-              ])
-              .output(outputPath)
-              .on('end', () => {
-                console.log(`✅ 分片 ${seg.filename} 双边裁剪完成 → ${outputFileName}`);
-                resolve();
-              })
-              .on('error', reject)
-              .run();
-          });
-          finalSegmentList.push({
-            filename: outputFileName,
-            duration: segDuration,
-            path: outputPath
-          });
-        } else if (isFirst && seg.startTime < start) {
-          // 第一个分片，需要裁剪开始部分
-          const outputFileName = `seg${String(segmentCounter++).padStart(5, '0')}_trim.ts`;
-          const outputPath = join(outputDir, outputFileName);
-          console.log(`🛠️ 正在裁剪分片 ${seg.filename}，裁剪范围: ${(segStart - seg.startTime).toFixed(1)}s - ${seg.duration.toFixed(1)}s`);
-          await new Promise((resolve, reject) => {
-            ffmpeg()
-              .input(join(inputDir, seg.filename))
-              .outputOptions([
-                '-ss', (segStart - seg.startTime).toString(),
-                '-c:v', 'libx264',
-                '-preset', 'ultrafast',
-                '-crf', lowQuality ? '23' : '18',
-                '-c:a', 'aac',
-                '-movflags', '+faststart'
-              ])
-              .output(outputPath)
-              .on('end', () => {
-                console.log(`✅ 分片 ${seg.filename} 开始部分裁剪完成 → ${outputFileName}`);
-                resolve();
-              })
-              .on('error', reject)
-              .run();
-          });
-          finalSegmentList.push({
-            filename: outputFileName,
-            duration: segDuration,
-            path: outputPath
-          });
-        } else if (isLast && seg.endTime > end) {
-          // 最后一个分片，需要裁剪结束部分
-          const outputFileName = `seg${String(segmentCounter++).padStart(5, '0')}_trim.ts`;
-          const outputPath = join(outputDir, outputFileName);
-          console.log(`🛠️ 正在裁剪分片 ${seg.filename}，裁剪范围: 0s - ${(segEnd - seg.startTime).toFixed(1)}s`);
-          await new Promise((resolve, reject) => {
-            ffmpeg()
-              .input(join(inputDir, seg.filename))
-              .outputOptions([
-                '-t', (segEnd - seg.startTime).toString(),
-                '-c:v', 'libx264',
-                '-preset', 'ultrafast',
-                '-crf', lowQuality ? '23' : '18',
-                '-c:a', 'aac',
-                '-movflags', '+faststart'
-              ])
-              .output(outputPath)
-              .on('end', () => {
-                console.log(`✅ 分片 ${seg.filename} 结束部分裁剪完成 → ${outputFileName}`);
-                resolve();
-              })
-              .on('error', reject)
-              .run();
-          });
-          finalSegmentList.push({
-            filename: outputFileName,
-            duration: segDuration,
-            path: outputPath
-          });
-        } else {
-          // 中间完整分片，直接复用
-          const outputFileName = `seg${String(segmentCounter++).padStart(5, '0')}.ts`;
-          const outputPath = join(outputDir, outputFileName);
-          console.log(`🔄 分片 ${seg.filename}: 直接复用 (完全包含在区间内) → ${outputFileName}`);
-          await cp(join(inputDir, seg.filename), outputPath);
-          console.log(`✅ 分片 ${seg.filename} 直接复用完成 → ${outputFileName}`);
-          finalSegmentList.push({
-            filename: outputFileName,
-            duration: segDuration,
-            path: outputPath
-          });
-        }
-      }
-      
-      console.log(`✅ 高效 Trim 区间 ${trimIndex} 处理完成，生成了 ${overlappingSegs.length} 个独立分片`);
-    }
+    const finalSegmentList = await processAllTrimIntervals({
+      trims,
+      segmentInfo,
+      inputDir,
+      outputDir,
+      lowQuality
+    });
 
     // 3. 构建新的 M3U8 播放列表 - 包含所有独立分片
     const outputPlaylistPath = join(outputDir, 'playlist.m3u8');
@@ -676,6 +551,177 @@ async function processTrimFast({ inputDir, outputDir, playlistPath, recordingId,
       await rm(tempDir, { recursive: true, force: true }); 
     } catch {}
   }
+}
+
+// 🔧 封装函数：处理所有trim区间
+async function processAllTrimIntervals({
+  trims,
+  segmentInfo,
+  inputDir,
+  outputDir,
+  lowQuality
+}) {
+  console.log(`🚀 开始处理 ${trims.length} 个trim区间...`);
+  
+  const finalSegmentList = []; // 存储所有最终的分片信息 {filename, duration, path}
+  const segmentCounter = { value: 0 }; // 全局分片计数器（使用对象以保持引用）
+  
+  for (let trimIndex = 0; trimIndex < trims.length; trimIndex++) {
+    await processSingleTrimInterval({
+      trimIndex,
+      trim: trims[trimIndex],
+      segmentInfo,
+      inputDir,
+      outputDir,
+      segmentCounter,
+      finalSegmentList,
+      lowQuality
+    });
+  }
+  
+  console.log(`✅ 所有trim区间处理完成，共生成 ${finalSegmentList.length} 个分片`);
+  return finalSegmentList;
+}
+
+// 🔧 封装函数：处理单个trim区间
+async function processSingleTrimInterval({
+  trimIndex,
+  trim,
+  segmentInfo,
+  inputDir,
+  outputDir,
+  segmentCounter,
+  finalSegmentList,
+  lowQuality
+}) {
+  const { start, end } = trim;
+  
+  // 🚀 开始执行时的日志
+  console.log(`🚀 正在执行精确裁剪 processTrimFast，目标区间: [${start}s, ${end}s]`);
+  
+  // 找到与trim区间重叠的分片
+  const overlappingSegs = segmentInfo.filter(seg => seg.endTime > start && seg.startTime < end);
+  if (overlappingSegs.length === 0) {
+    console.warn(`⚠️ Trim区间 ${trimIndex} (${start}s-${end}s) 没有找到重叠的分片`);
+    return segmentCounter.value;
+  }
+
+  // 🎬 处理当前区间的每个分片，生成独立的TS文件
+  for (let i = 0; i < overlappingSegs.length; i++) {
+    const seg = overlappingSegs[i];
+    const isFirst = i === 0;
+    const isLast = i === overlappingSegs.length - 1;
+    
+    // 判断分片的处理类型
+    const segStart = Math.max(seg.startTime, start);
+    const segEnd = Math.min(seg.endTime, end);
+    const segDuration = segEnd - segStart;
+    
+    if (isFirst && isLast) {
+      // 只有一个分片，需要裁剪开始和结束
+      const outputFileName = `seg${String(segmentCounter.value++).padStart(5, '0')}_trim.ts`;
+      const outputPath = join(outputDir, outputFileName);
+      console.log(`🛠️ 正在裁剪分片 ${seg.filename}，裁剪范围: ${(segStart - seg.startTime).toFixed(1)}s - ${(segEnd - seg.startTime).toFixed(1)}s`);
+      await new Promise((resolve, reject) => {
+        ffmpeg()
+          .input(join(inputDir, seg.filename))
+          .outputOptions([
+            '-ss', (segStart - seg.startTime).toString(),
+            '-t', segDuration.toString(),
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast',
+            '-crf', lowQuality ? '23' : '18',
+            '-c:a', 'aac',
+            '-movflags', '+faststart'
+          ])
+          .output(outputPath)
+          .on('end', () => {
+            console.log(`✅ 分片 ${seg.filename} 双边裁剪完成 → ${outputFileName}`);
+            resolve();
+          })
+          .on('error', reject)
+          .run();
+      });
+      finalSegmentList.push({
+        filename: outputFileName,
+        duration: segDuration,
+        path: outputPath
+      });
+    } else if (isFirst && seg.startTime < start) {
+      // 第一个分片，需要裁剪开始部分
+      const outputFileName = `seg${String(segmentCounter.value++).padStart(5, '0')}_trim.ts`;
+      const outputPath = join(outputDir, outputFileName);
+      console.log(`🛠️ 正在裁剪分片 ${seg.filename}，裁剪范围: ${(segStart - seg.startTime).toFixed(1)}s - ${seg.duration.toFixed(1)}s`);
+      await new Promise((resolve, reject) => {
+        ffmpeg()
+          .input(join(inputDir, seg.filename))
+          .outputOptions([
+            '-ss', (segStart - seg.startTime).toString(),
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast',
+            '-crf', lowQuality ? '23' : '18',
+            '-c:a', 'aac',
+            '-movflags', '+faststart'
+          ])
+          .output(outputPath)
+          .on('end', () => {
+            console.log(`✅ 分片 ${seg.filename} 开始部分裁剪完成 → ${outputFileName}`);
+            resolve();
+          })
+          .on('error', reject)
+          .run();
+      });
+      finalSegmentList.push({
+        filename: outputFileName,
+        duration: segDuration,
+        path: outputPath
+      });
+    } else if (isLast && seg.endTime > end) {
+      // 最后一个分片，需要裁剪结束部分
+      const outputFileName = `seg${String(segmentCounter.value++).padStart(5, '0')}_trim.ts`;
+      const outputPath = join(outputDir, outputFileName);
+      console.log(`🛠️ 正在裁剪分片 ${seg.filename}，裁剪范围: 0s - ${(segEnd - seg.startTime).toFixed(1)}s`);
+      await new Promise((resolve, reject) => {
+        ffmpeg()
+          .input(join(inputDir, seg.filename))
+          .outputOptions([
+            '-t', (segEnd - seg.startTime).toString(),
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast',
+            '-crf', lowQuality ? '23' : '18',
+            '-c:a', 'aac',
+            '-movflags', '+faststart'
+          ])
+          .output(outputPath)
+          .on('end', () => {
+            console.log(`✅ 分片 ${seg.filename} 结束部分裁剪完成 → ${outputFileName}`);
+            resolve();
+          })
+          .on('error', reject)
+          .run();
+      });
+      finalSegmentList.push({
+        filename: outputFileName,
+        duration: segDuration,
+        path: outputPath
+      });
+    } else {
+      // 中间完整分片，直接复用
+      const outputFileName = `seg${String(segmentCounter.value++).padStart(5, '0')}.ts`;
+      const outputPath = join(outputDir, outputFileName);
+      console.log(`🔄 分片 ${seg.filename}: 直接复用 (完全包含在区间内) → ${outputFileName}`);
+      await cp(join(inputDir, seg.filename), outputPath);
+      console.log(`✅ 分片 ${seg.filename} 直接复用完成 → ${outputFileName}`);
+      finalSegmentList.push({
+        filename: outputFileName,
+        duration: segDuration,
+        path: outputPath
+      });
+    }
+  }
+  
+  console.log(`✅ 高效 Trim 区间 ${trimIndex} 处理完成，生成了 ${overlappingSegs.length} 个独立分片`);
+  return segmentCounter.value;
 }
 
 async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zooms, lowQuality, spec }) {
