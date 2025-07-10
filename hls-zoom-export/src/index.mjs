@@ -84,32 +84,17 @@ export const handler = async (event) => {
   
     // 2. 执行处理逻辑（互斥：trims 或 zooms）
     if (spec.trims && spec.trims.length > 0) {
-      const useAccurateTrim = spec.accurateTrim === true || spec.accurateTrim === 'true';
-      if (useAccurateTrim) {
-        console.log("✂️ 开始高效 Trim 处理...");
-        await processTrimFast({
-          inputDir: segDir,
-          outputDir,
-          playlistPath,
-          recordingId: spec.recordingId,
-          trims: spec.trims,
-          lowQuality: spec.lowQuality === 'true' ? true : false,
-          spec,
-        });
-        console.log("✅ 高效 Trim 处理完成");
-      } else {
-        console.log("✂️ 开始传统 Trim 处理...");
-        await processTrim({
-          inputDir: segDir,
-          outputDir,
-          playlistPath,
-          recordingId: spec.recordingId,
-          trims: spec.trims,
-          lowQuality: spec.lowQuality === 'true' ? true : false,
-          spec,
-        });
-        console.log("✅ 传统 Trim 处理完成");
-      }
+      console.log("✂️ 开始 Trim 处理...");
+      await processTrimFast({
+        inputDir: segDir,
+        outputDir,
+        playlistPath,
+        recordingId: spec.recordingId,
+        trims: spec.trims,
+        lowQuality: spec.lowQuality === 'true' ? true : false,
+        spec,
+      });
+      console.log("✅ Trim 处理完成");
     } else if (spec.zooms && spec.zooms.length > 0) {
       console.log("🎬 开始 Zoom 处理...");
       await processZoom({
@@ -212,11 +197,6 @@ function parsePayload(raw) {
   }
   
   console.log("✅ 所有必需字段检查通过");
-  
-  // 🔍 检查可选参数
-  if (body.accurateTrim !== undefined) {
-    console.log(`🎯 accurateTrim 参数: ${body.accurateTrim}`);
-  }
   
   // 🔍 参数校验和互斥逻辑
   if (body.trims && Array.isArray(body.trims) && body.trims.length > 0) {
@@ -422,206 +402,6 @@ async function uploadFolderToS3(folder, s3Prefix) {
   }
 }
 
-// 🔍 Trim 处理函数
-async function processTrim({ inputDir, outputDir, playlistPath, recordingId, trims, lowQuality, spec }) {
-  console.log("✂️ 开始多段Trim处理...");
-  console.log("📊 参数:", { trims, lowQuality });
-
-  const tempDir = `/tmp/trim_${recordingId}`;
-  await mkdir(tempDir, { recursive: true });
-
-  try {
-    // 0. 先解析M3U8播放列表，确定需要哪些分片
-    console.log("📋 解析M3U8播放列表，确定需要的分片...");
-    const playlistContent = await readFile(playlistPath, 'utf8');
-    const lines = playlistContent.split('\n');
-    const segmentInfo = [];
-    let currentTime = 0;
-    let segmentIndex = 0;
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (line.startsWith('#EXTINF:')) {
-        const duration = parseFloat(line.match(/#EXTINF:([0-9]+\.?[0-9]*),/)[1]);
-        const nextLine = lines[i + 1]?.trim();
-        if (nextLine && nextLine.endsWith('.ts')) {
-          const startTime = currentTime;
-          const endTime = currentTime + duration;
-          segmentInfo.push({
-            index: segmentIndex,
-            filename: nextLine,
-            duration,
-            startTime,
-            endTime
-          });
-          currentTime = endTime;
-          segmentIndex++;
-        }
-      }
-    }
-
-    // 1. 确定需要的分片文件
-    const neededSegments = new Set();
-    for (const trim of trims) {
-      const overlappingSegs = segmentInfo.filter(seg => seg.endTime > trim.start && seg.startTime < trim.end);
-      overlappingSegs.forEach(seg => neededSegments.add(seg.filename));
-    }
-
-    // 2. 只拷贝需要的文件到输出目录
-    console.log("📋 拷贝需要的文件到输出目录...");
-    const inputFiles = await readdir(inputDir);
-    for (const file of inputFiles) {
-      if (!file.endsWith('.ts') || neededSegments.has(file)) {
-        const sourcePath = join(inputDir, file);
-        const destPath = join(outputDir, file);
-        await cp(sourcePath, destPath);
-      }
-    }
-    console.log(`✅ 拷贝完成，共拷贝 ${neededSegments.size} 个分片文件`);
-
-    // 3. 处理每个 trim 区间
-    const trimmedSegments = [];
-    for (let trimIndex = 0; trimIndex < trims.length; trimIndex++) {
-      const { start, end } = trims[trimIndex];
-      
-      // 找到与trim区间重叠的分片
-      const overlappingSegs = segmentInfo.filter(seg => seg.endTime > start && seg.startTime < end);
-      if (overlappingSegs.length === 0) {
-        console.warn(`⚠️ Trim区间 ${trimIndex} (${start}s-${end}s) 没有找到重叠的分片`);
-        continue;
-      }
-
-      console.log(`✂️ 处理 Trim 区间 ${trimIndex}: ${start}s → ${end}s`);
-      
-      // 合并重叠分片
-      const concatList = overlappingSegs.map(seg => `file '${join(inputDir, seg.filename)}'`).join('\n');
-      const concatListPath = join(tempDir, `concat_list_${trimIndex}.txt`);
-      await writeFile(concatListPath, concatList);
-      
-      const mergedInputPath = join(tempDir, `merged_input_${trimIndex}.ts`);
-      await new Promise((resolve, reject) => {
-        ffmpeg()
-          .input(concatListPath)
-          .inputOptions(['-f', 'concat', '-safe', '0'])
-          .outputOptions(['-c', 'copy'])
-          .output(mergedInputPath)
-          .on('end', resolve)
-          .on('error', reject)
-          .run();
-      });
-
-      // 计算相对于合并分片的trim时间
-      const firstSegStartTime = overlappingSegs[0].startTime;
-      const relativeStart = Math.max(0, start - firstSegStartTime);
-      const relativeEnd = end - firstSegStartTime;
-      
-      // 精确时间裁剪
-      const duration = relativeEnd - relativeStart;
-      console.log(`✂️ 时间裁剪: ${relativeStart.toFixed(3)}s → ${relativeEnd.toFixed(3)}s (${duration.toFixed(3)}s)`);
-      
-      const trimmedPath = join(tempDir, `trimmed_${trimIndex}.ts`);
-      await new Promise((resolve, reject) => {
-        ffmpeg()
-          .input(mergedInputPath)
-          .outputOptions([
-            '-ss', relativeStart.toString(),         // ✅ 输出级裁剪（更精确）
-            '-t', (relativeEnd - relativeStart).toString(),
-            '-c:v', 'libx264',
-            '-preset', 'ultrafast',
-            '-crf', lowQuality ? '23' : '18',
-            '-c:a', 'aac',
-            '-movflags', '+faststart'
-          ])
-          .output(trimmedPath)
-          .on('end', resolve)
-          .on('error', reject)
-          .run();
-      });      
-
-      trimmedSegments.push({
-        path: trimmedPath,
-        duration: duration
-      });
-      
-      console.log(`✅ Trim ${trimIndex} 完成: ${duration.toFixed(3)}秒`);
-    }
-
-    // 4. 拼接所有trim片段
-    const outputPlaylistPath = join(outputDir, 'playlist.m3u8');
-    
-    if (trimmedSegments.length > 0) {
-      const finalConcatList = trimmedSegments.map(seg => `file '${seg.path}'`).join('\n');
-      const finalConcatListPath = join(tempDir, 'final_concat_list.txt');
-      await writeFile(finalConcatListPath, finalConcatList);
-      
-      const finalOutputPath = join(outputDir, 'trimmed.ts');
-      await new Promise((resolve, reject) => {
-        ffmpeg()
-          .input(finalConcatListPath)
-          .inputOptions(['-f', 'concat', '-safe', '0'])
-          .outputOptions(['-c', 'copy'])
-          .output(finalOutputPath)
-          .on('end', resolve)
-          .on('error', reject)
-          .run();
-      });
-
-      // 5. 重建 playlist.m3u8
-      const totalDuration = trimmedSegments.reduce((sum, seg) => sum + seg.duration, 0);
-      
-      const newPlaylist = [
-        '#EXTM3U',
-        '#EXT-X-VERSION:6',
-        '#EXT-X-TARGETDURATION:' + Math.ceil(totalDuration),
-        '#EXT-X-MEDIA-SEQUENCE:0',
-        '#EXT-X-INDEPENDENT-SEGMENTS',
-        `#EXTINF:${totalDuration.toFixed(6)},`,
-        'trimmed.ts',
-        '#EXT-X-ENDLIST'
-      ].join('\n');
-      
-      await writeFile(outputPlaylistPath, newPlaylist);
-      console.log('✅ Trim处理完成！');
-    } else {
-      // 如果没有成功的trim片段，创建一个空的playlist
-      const emptyPlaylist = [
-        '#EXTM3U',
-        '#EXT-X-VERSION:6',
-        '#EXT-X-TARGETDURATION:1',
-        '#EXT-X-MEDIA-SEQUENCE:0',
-        '#EXT-X-INDEPENDENT-SEGMENTS',
-        '#EXT-X-ENDLIST'
-      ].join('\n');
-      
-      await writeFile(outputPlaylistPath, emptyPlaylist);
-      console.log('⚠️ 没有成功的trim片段，创建空playlist');
-    }
-
-    // 上传 Trim 后的 HLS 文件夹
-    const hlsOutputPrefix = `${spec.outputS3Prefix}/${spec.recordingId}_trimmed`;
-    console.log('📤 开始上传HLS到S3...', hlsOutputPrefix);
-    await uploadFolderToS3(outputDir, hlsOutputPrefix);
-    console.log('✅ HLS上传完成:', hlsOutputPrefix);
-
-    // 自动导出MP4
-    const outputMp4 = join(outputDir, `${recordingId}.mp4`);
-    
-    // 🔧 生成concat列表文件用于MP4导出
-    console.log('🔧 生成concat列表文件...');
-    const concatListPath = await generateConcatList(outputPlaylistPath, outputDir);
-    
-    await runFfmpeg(concatListPath, outputMp4);
-    console.log('✅ MP4导出完成:', outputMp4);
-    
-    // 上传MP4到S3
-    console.log('📤 开始上传MP4到S3...');
-    await uploadMp4ToS3(outputMp4, spec);
-    console.log('✅ MP4上传完成:', `${spec.outputS3Prefix}/${spec.recordingId}.mp4`);
-  } finally {
-    try { 
-      await rm(tempDir, { recursive: true, force: true }); 
-    } catch {}
-  }
-}
 
 // 🔍 高效 Trim 处理函数 - 只对边界分片转码，中间分片直接复用
 async function processTrimFast({ inputDir, outputDir, playlistPath, recordingId, trims, lowQuality, spec }) {
@@ -960,10 +740,10 @@ async function processTrimFast({ inputDir, outputDir, playlistPath, recordingId,
     }
 
     // 上传 Trim 后的 HLS 文件夹
-    // const hlsOutputPrefix = `${spec.outputS3Prefix}/${spec.recordingId}_trimmed`;
-    // console.log('📤 开始上传HLS到S3...', hlsOutputPrefix);
-    // await uploadFolderToS3(outputDir, hlsOutputPrefix);
-    // console.log('✅ HLS上传完成:', hlsOutputPrefix);
+    const hlsOutputPrefix = `${spec.outputS3Prefix}/${spec.recordingId}_trimmed`;
+    console.log('📤 开始上传HLS到S3...', hlsOutputPrefix);
+    await uploadFolderToS3(outputDir, hlsOutputPrefix);
+    console.log('✅ HLS上传完成:', hlsOutputPrefix);
 
         // 4. 自动导出MP4 - 基于新的分片架构
     const outputMp4 = join(outputDir, `${recordingId}.mp4`);
