@@ -673,8 +673,10 @@ async function processTrimFast({ inputDir, outputDir, playlistPath, recordingId,
     }
     console.log(`✅ 拷贝完成，共拷贝 ${neededSegments.size} 个分片文件`);
 
-    // 2. 高效处理每个 trim 区间
-    const trimmedSegments = [];
+    // 2. 高效处理每个 trim 区间 - 新架构：输出独立TS分片
+    const finalSegmentList = []; // 存储所有最终的分片信息 {filename, duration, path}
+    let segmentCounter = 0; // 全局分片计数器
+    
     for (let trimIndex = 0; trimIndex < trims.length; trimIndex++) {
       const { start, end } = trims[trimIndex];
       
@@ -712,10 +714,8 @@ async function processTrimFast({ inputDir, outputDir, playlistPath, recordingId,
           console.log(`✅ 分片 ${seg.filename} 完全位于裁剪区间内，将直接合并`);
         }
       });
-      
-      const processedSegmentPaths = [];
-      let totalDuration = 0;
 
+      // 🎬 处理当前区间的每个分片，生成独立的TS文件
       for (let i = 0; i < overlappingSegs.length; i++) {
         const seg = overlappingSegs[i];
         const isFirst = i === 0;
@@ -728,7 +728,8 @@ async function processTrimFast({ inputDir, outputDir, playlistPath, recordingId,
         
         if (isFirst && isLast) {
           // 只有一个分片，需要裁剪开始和结束
-          const trimmedPath = join(tempDir, `trimmed_${trimIndex}_${i}.ts`);
+          const outputFileName = `seg${String(segmentCounter++).padStart(5, '0')}_trim.ts`;
+          const outputPath = join(outputDir, outputFileName);
           console.log(`🛠️ 正在裁剪分片 ${seg.filename}，裁剪范围: ${(segStart - seg.startTime).toFixed(1)}s - ${(segEnd - seg.startTime).toFixed(1)}s`);
           await new Promise((resolve, reject) => {
             ffmpeg()
@@ -742,18 +743,23 @@ async function processTrimFast({ inputDir, outputDir, playlistPath, recordingId,
                 '-c:a', 'aac',
                 '-movflags', '+faststart'
               ])
-              .output(trimmedPath)
+              .output(outputPath)
               .on('end', () => {
-                console.log(`✅ 分片 ${seg.filename} 双边裁剪完成`);
+                console.log(`✅ 分片 ${seg.filename} 双边裁剪完成 → ${outputFileName}`);
                 resolve();
               })
               .on('error', reject)
               .run();
           });
-          processedSegmentPaths.push(trimmedPath);
+          finalSegmentList.push({
+            filename: outputFileName,
+            duration: segDuration,
+            path: outputPath
+          });
         } else if (isFirst && seg.startTime < start) {
           // 第一个分片，需要裁剪开始部分
-          const trimmedPath = join(tempDir, `trimmed_${trimIndex}_${i}.ts`);
+          const outputFileName = `seg${String(segmentCounter++).padStart(5, '0')}_trim.ts`;
+          const outputPath = join(outputDir, outputFileName);
           console.log(`🛠️ 正在裁剪分片 ${seg.filename}，裁剪范围: ${(segStart - seg.startTime).toFixed(1)}s - ${seg.duration.toFixed(1)}s`);
           await new Promise((resolve, reject) => {
             ffmpeg()
@@ -766,18 +772,23 @@ async function processTrimFast({ inputDir, outputDir, playlistPath, recordingId,
                 '-c:a', 'aac',
                 '-movflags', '+faststart'
               ])
-              .output(trimmedPath)
+              .output(outputPath)
               .on('end', () => {
-                console.log(`✅ 分片 ${seg.filename} 开始部分裁剪完成`);
+                console.log(`✅ 分片 ${seg.filename} 开始部分裁剪完成 → ${outputFileName}`);
                 resolve();
               })
               .on('error', reject)
               .run();
           });
-          processedSegmentPaths.push(trimmedPath);
+          finalSegmentList.push({
+            filename: outputFileName,
+            duration: segDuration,
+            path: outputPath
+          });
         } else if (isLast && seg.endTime > end) {
           // 最后一个分片，需要裁剪结束部分
-          const trimmedPath = join(tempDir, `trimmed_${trimIndex}_${i}.ts`);
+          const outputFileName = `seg${String(segmentCounter++).padStart(5, '0')}_trim.ts`;
+          const outputPath = join(outputDir, outputFileName);
           console.log(`🛠️ 正在裁剪分片 ${seg.filename}，裁剪范围: 0s - ${(segEnd - seg.startTime).toFixed(1)}s`);
           await new Promise((resolve, reject) => {
             ffmpeg()
@@ -790,101 +801,74 @@ async function processTrimFast({ inputDir, outputDir, playlistPath, recordingId,
                 '-c:a', 'aac',
                 '-movflags', '+faststart'
               ])
-              .output(trimmedPath)
+              .output(outputPath)
               .on('end', () => {
-                console.log(`✅ 分片 ${seg.filename} 结束部分裁剪完成`);
+                console.log(`✅ 分片 ${seg.filename} 结束部分裁剪完成 → ${outputFileName}`);
                 resolve();
               })
               .on('error', reject)
               .run();
           });
-          processedSegmentPaths.push(trimmedPath);
+          finalSegmentList.push({
+            filename: outputFileName,
+            duration: segDuration,
+            path: outputPath
+          });
         } else {
           // 中间完整分片，直接复用
-          console.log(`🔄 分片 ${seg.filename}: 直接复用 (完全包含在区间内)`);
-          const reusedPath = join(tempDir, `reused_${trimIndex}_${i}.ts`);
-          await cp(join(inputDir, seg.filename), reusedPath);
-          console.log(`✅ 分片 ${seg.filename} 直接复用完成`);
-          processedSegmentPaths.push(reusedPath);
+          const outputFileName = `seg${String(segmentCounter++).padStart(5, '0')}.ts`;
+          const outputPath = join(outputDir, outputFileName);
+          console.log(`🔄 分片 ${seg.filename}: 直接复用 (完全包含在区间内) → ${outputFileName}`);
+          await cp(join(inputDir, seg.filename), outputPath);
+          console.log(`✅ 分片 ${seg.filename} 直接复用完成 → ${outputFileName}`);
+          finalSegmentList.push({
+            filename: outputFileName,
+            duration: segDuration,
+            path: outputPath
+          });
         }
-        
-        totalDuration += segDuration;
       }
-
-      // 3. 合并当前trim区间的所有处理后分片
-      if (processedSegmentPaths.length > 0) {
-        // 📦 显示最终将合并的分片顺序
-        const segmentNames = processedSegmentPaths.map(path => {
-          const fileName = path.split('/').pop(); // 获取文件名
-          return fileName;
-        });
-        console.log(`📦 最终将合并以下分片为输出视频: [${segmentNames.join(', ')}]`);
-        
-        const concatList = processedSegmentPaths.map(path => `file '${path}'`).join('\n');
-        const concatListPath = join(tempDir, `concat_list_${trimIndex}.txt`);
-        await writeFile(concatListPath, concatList);
-        
-        console.log(`🔧 开始合并区间 ${trimIndex} 的 ${processedSegmentPaths.length} 个分片...`);
-        const finalTrimmedPath = join(tempDir, `final_trimmed_${trimIndex}.ts`);
-        await new Promise((resolve, reject) => {
-          ffmpeg()
-            .input(concatListPath)
-            .inputOptions(['-f', 'concat', '-safe', '0'])
-            .outputOptions(['-c', 'copy'])
-            .output(finalTrimmedPath)
-            .on('end', () => {
-              console.log(`✅ 区间 ${trimIndex} 分片合并完成`);
-              resolve();
-            })
-            .on('error', reject)
-            .run();
-        });
-
-        trimmedSegments.push({
-          path: finalTrimmedPath,
-          duration: totalDuration
-        });
-        
-        console.log(`✅ 高效 Trim ${trimIndex} 完成: ${totalDuration.toFixed(3)}秒`);
-      }
+      
+      console.log(`✅ 高效 Trim 区间 ${trimIndex} 处理完成，生成了 ${overlappingSegs.length} 个独立分片`);
     }
 
-    // 4. 拼接所有trim片段
+    // 3. 构建新的 M3U8 播放列表 - 包含所有独立分片
     const outputPlaylistPath = join(outputDir, 'playlist.m3u8');
     
-    if (trimmedSegments.length > 0) {
-      const finalConcatList = trimmedSegments.map(seg => `file '${seg.path}'`).join('\n');
-      const finalConcatListPath = join(tempDir, 'final_concat_list.txt');
-      await writeFile(finalConcatListPath, finalConcatList);
+    if (finalSegmentList.length > 0) {
+      // 📦 显示最终的分片组织结构
+      const segmentNames = finalSegmentList.map(seg => seg.filename);
+      console.log(`📦 最终输出的独立分片序列: [${segmentNames.join(', ')}]`);
       
-      const finalOutputPath = join(outputDir, 'trimmed.ts');
-      await new Promise((resolve, reject) => {
-        ffmpeg()
-          .input(finalConcatListPath)
-          .inputOptions(['-f', 'concat', '-safe', '0'])
-          .outputOptions(['-c', 'copy'])
-          .output(finalOutputPath)
-          .on('end', resolve)
-          .on('error', reject)
-          .run();
-      });
-
-      // 5. 重建 playlist.m3u8
-      const totalDuration = trimmedSegments.reduce((sum, seg) => sum + seg.duration, 0);
+      // 🎬 计算播放列表参数
+      const totalDuration = finalSegmentList.reduce((sum, seg) => sum + seg.duration, 0);
+      const maxDuration = Math.max(...finalSegmentList.map(seg => seg.duration));
       
-      const newPlaylist = [
+      console.log(`🎯 播放列表统计: 总时长 ${totalDuration.toFixed(2)}s，最大分片时长 ${maxDuration.toFixed(2)}s`);
+      
+      // 🏗️ 构建 M3U8 播放列表
+      const playlistLines = [
         '#EXTM3U',
         '#EXT-X-VERSION:6',
-        '#EXT-X-TARGETDURATION:' + Math.ceil(totalDuration),
+        `#EXT-X-TARGETDURATION:${Math.ceil(maxDuration)}`,
         '#EXT-X-MEDIA-SEQUENCE:0',
-        '#EXT-X-INDEPENDENT-SEGMENTS',
-        `#EXTINF:${totalDuration.toFixed(6)},`,
-        'trimmed.ts',
-        '#EXT-X-ENDLIST'
-      ].join('\n');
+        '#EXT-X-INDEPENDENT-SEGMENTS'
+      ];
       
+      // 添加每个分片的信息
+      finalSegmentList.forEach((seg, index) => {
+        playlistLines.push(`#EXTINF:${seg.duration.toFixed(6)},`);
+        playlistLines.push(seg.filename);
+        console.log(`📄 分片 ${index + 1}: ${seg.filename} (${seg.duration.toFixed(2)}s)`);
+      });
+      
+      playlistLines.push('#EXT-X-ENDLIST');
+      
+      const newPlaylist = playlistLines.join('\n');
       await writeFile(outputPlaylistPath, newPlaylist);
-      console.log('✅ 高效Trim处理完成！');
+      
+      console.log(`🎉 新架构高效Trim处理完成！`);
+      console.log(`📊 输出摘要: ${finalSegmentList.length} 个独立分片，总时长 ${totalDuration.toFixed(2)}s`);
     } else {
       // 如果没有成功的trim片段，创建一个空的playlist
       const emptyPlaylist = [
@@ -906,8 +890,9 @@ async function processTrimFast({ inputDir, outputDir, playlistPath, recordingId,
     await uploadFolderToS3(outputDir, hlsOutputPrefix);
     console.log('✅ HLS上传完成:', hlsOutputPrefix);
 
-    // 自动导出MP4
+    // 4. 自动导出MP4 - 基于新的分片架构
     const outputMp4 = join(outputDir, `${recordingId}.mp4`);
+    console.log('🎬 开始基于新分片架构导出MP4...');
     await runFfmpeg(outputPlaylistPath, outputMp4);
     console.log('✅ MP4导出完成:', outputMp4);
     
