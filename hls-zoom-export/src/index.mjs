@@ -887,6 +887,76 @@ async function processTrimFast({ inputDir, outputDir, playlistPath, recordingId,
       
       await writeFile(outputPlaylistPath, emptyPlaylist);
       console.log('⚠️ 没有成功的trim片段，创建空playlist');
+        }
+
+    // 🔧 两阶段封装：解决播放不连续问题
+    console.log('🔧 开始两阶段封装处理，解决播放不连续问题...');
+    
+    try {
+      // 第一步：生成concat列表文件
+      console.log('📝 第一步：生成concat列表文件...');
+      const concatListPath = await generateConcatList(outputPlaylistPath, outputDir);
+      
+      // 第二步：合并成连续的MP4文件
+      console.log('🎬 第二步：合并分片为连续MP4...');
+      const mergedMp4Path = join(outputDir, 'merged_continuous.mp4');
+      
+      await new Promise((resolve, reject) => {
+        ffmpeg()
+          .input(concatListPath)
+          .inputOptions(['-f', 'concat', '-safe', '0'])
+          .outputOptions([
+            '-c', 'copy',
+            '-fflags', '+genpts',
+            '-avoid_negative_ts', 'make_zero'
+          ])
+          .output(mergedMp4Path)
+          .on('start', (cmd) => console.log('[ffmpeg merge]', cmd))
+          .on('end', () => {
+            console.log('✅ MP4合并完成，时间戳已连续化');
+            resolve();
+          })
+          .on('error', reject)
+          .run();
+      });
+      
+      // 第三步：将连续MP4重新切分成标准TS分片
+      console.log('✂️ 第三步：重新切分为标准HLS分片...');
+      const finalPlaylistPath = join(outputDir, 'final_playlist.m3u8');
+      
+      await new Promise((resolve, reject) => {
+        ffmpeg()
+          .input(mergedMp4Path)
+          .outputOptions([
+            '-c', 'copy',
+            '-f', 'hls',
+            '-hls_time', '4',
+            '-hls_segment_type', 'mpegts',
+            '-hls_segment_filename', join(outputDir, 'segment_%03d.ts'),
+            '-hls_playlist_type', 'vod'
+          ])
+          .output(finalPlaylistPath)
+          .on('start', (cmd) => console.log('[ffmpeg hls]', cmd))
+          .on('end', () => {
+            console.log('✅ HLS重新切分完成，播放连续性已优化');
+            resolve();
+          })
+          .on('error', reject)
+          .run();
+      });
+      
+      // 第四步：替换原播放列表
+      console.log('🔄 第四步：更新播放列表...');
+      await cp(finalPlaylistPath, outputPlaylistPath);
+      
+      // 清理临时文件
+      await rm(mergedMp4Path, { force: true });
+      await rm(concatListPath, { force: true });
+      
+      console.log('🎉 两阶段封装完成！播放连续性已优化');
+      
+    } catch (error) {
+      console.warn('⚠️ 两阶段封装失败，回退到原始流程:', error.message);
     }
 
     // 上传 Trim 后的 HLS 文件夹
