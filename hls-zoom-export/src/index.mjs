@@ -747,58 +747,7 @@ async function processTrimFast({ inputDir, outputDir, playlistPath, recordingId,
 
         // 4. 自动导出MP4 - 基于新的分片架构
     const outputMp4 = join(outputDir, `${recordingId}.mp4`);
-    console.log('🎬 开始基于新分片架构导出MP4...');
-    
-    // 📄 读取并打印最终播放列表中的所有分片信息
-    console.log('📋 最终播放列表分片信息:');
-    try {
-      const finalPlaylistContent = await readFile(outputPlaylistPath, 'utf8');
-      const finalLines = finalPlaylistContent.split('\n');
-      let segmentIndex = 1;
-      let totalPlaylistDuration = 0;
-      let totalActualDuration = 0;
-      
-      for (let i = 0; i < finalLines.length; i++) {
-        const line = finalLines[i].trim();
-        if (line.startsWith('#EXTINF:')) {
-          const playlistDuration = parseFloat(line.match(/#EXTINF:([0-9]+\.?[0-9]*),/)?.[1] || '0');
-          const nextLine = finalLines[i + 1]?.trim();
-          if (nextLine && nextLine.endsWith('.ts')) {
-            // 获取实际文件时长
-            const segmentPath = join(outputDir, nextLine);
-            try {
-              const videoInfo = await getVideoInfo(segmentPath);
-              const actualDuration = videoInfo.duration;
-              const timeDiff = Math.abs(playlistDuration - actualDuration);
-              const diffIndicator = timeDiff > 0.1 ? '⚠️' : '✅';
-              
-              console.log(`📄 分片 ${segmentIndex}: ${nextLine}`);
-              console.log(`   📋 Playlist时长: ${playlistDuration.toFixed(3)}s | 🎬 实际时长: ${actualDuration.toFixed(3)}s | ${diffIndicator} 差异: ${timeDiff.toFixed(3)}s`);
-              
-              totalPlaylistDuration += playlistDuration;
-              totalActualDuration += actualDuration;
-              segmentIndex++;
-            } catch (infoError) {
-              console.warn(`⚠️ 无法获取分片 ${nextLine} 的视频信息:`, infoError.message);
-              console.log(`📄 分片 ${segmentIndex}: ${nextLine} (Playlist时长: ${playlistDuration.toFixed(3)}s, 实际时长: 未知)`);
-              totalPlaylistDuration += playlistDuration;
-              segmentIndex++;
-            }
-          }
-        }
-      }
-      
-      const totalTimeDiff = Math.abs(totalPlaylistDuration - totalActualDuration);
-      const totalDiffIndicator = totalTimeDiff > 0.5 ? '⚠️' : '✅';
-      
-      console.log(`🎯 播放列表汇总: 共 ${segmentIndex - 1} 个分片`);
-      console.log(`📋 Playlist总时长: ${totalPlaylistDuration.toFixed(2)}s | 🎬 实际总时长: ${totalActualDuration.toFixed(2)}s | ${totalDiffIndicator} 总差异: ${totalTimeDiff.toFixed(2)}s`);
-    } catch (error) {
-      console.warn('⚠️ 读取播放列表失败:', error.message);
-    }
-
-    // 🔧 生成concat列表文件用于MP4导出
-    console.log('🔧 生成concat列表文件...');
+    console.log('🎬 开始导出MP4...');
     const concatListPath = await generateConcatList(outputPlaylistPath, outputDir);
     
     await runFfmpeg(concatListPath, outputMp4);
