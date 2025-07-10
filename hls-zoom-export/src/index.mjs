@@ -604,7 +604,12 @@ async function processTrim({ inputDir, outputDir, playlistPath, recordingId, tri
 
     // 自动导出MP4
     const outputMp4 = join(outputDir, `${recordingId}.mp4`);
-    await runFfmpeg(outputPlaylistPath, outputMp4);
+    
+    // 🔧 生成concat列表文件用于MP4导出
+    console.log('🔧 生成concat列表文件...');
+    const concatListPath = await generateConcatList(outputPlaylistPath, outputDir);
+    
+    await runFfmpeg(concatListPath, outputMp4);
     console.log('✅ MP4导出完成:', outputMp4);
     
     // 上传MP4到S3
@@ -885,15 +890,68 @@ async function processTrimFast({ inputDir, outputDir, playlistPath, recordingId,
     }
 
     // 上传 Trim 后的 HLS 文件夹
-    const hlsOutputPrefix = `${spec.outputS3Prefix}/${spec.recordingId}_trimmed`;
-    console.log('📤 开始上传HLS到S3...', hlsOutputPrefix);
-    await uploadFolderToS3(outputDir, hlsOutputPrefix);
-    console.log('✅ HLS上传完成:', hlsOutputPrefix);
+    // const hlsOutputPrefix = `${spec.outputS3Prefix}/${spec.recordingId}_trimmed`;
+    // console.log('📤 开始上传HLS到S3...', hlsOutputPrefix);
+    // await uploadFolderToS3(outputDir, hlsOutputPrefix);
+    // console.log('✅ HLS上传完成:', hlsOutputPrefix);
 
-    // 4. 自动导出MP4 - 基于新的分片架构
+        // 4. 自动导出MP4 - 基于新的分片架构
     const outputMp4 = join(outputDir, `${recordingId}.mp4`);
     console.log('🎬 开始基于新分片架构导出MP4...');
-    await runFfmpeg(outputPlaylistPath, outputMp4);
+    
+    // 📄 读取并打印最终播放列表中的所有分片信息
+    console.log('📋 最终播放列表分片信息:');
+    try {
+      const finalPlaylistContent = await readFile(outputPlaylistPath, 'utf8');
+      const finalLines = finalPlaylistContent.split('\n');
+      let segmentIndex = 1;
+      let totalPlaylistDuration = 0;
+      let totalActualDuration = 0;
+      
+      for (let i = 0; i < finalLines.length; i++) {
+        const line = finalLines[i].trim();
+        if (line.startsWith('#EXTINF:')) {
+          const playlistDuration = parseFloat(line.match(/#EXTINF:([0-9]+\.?[0-9]*),/)?.[1] || '0');
+          const nextLine = finalLines[i + 1]?.trim();
+          if (nextLine && nextLine.endsWith('.ts')) {
+            // 获取实际文件时长
+            const segmentPath = join(outputDir, nextLine);
+            try {
+              const videoInfo = await getVideoInfo(segmentPath);
+              const actualDuration = videoInfo.duration;
+              const timeDiff = Math.abs(playlistDuration - actualDuration);
+              const diffIndicator = timeDiff > 0.1 ? '⚠️' : '✅';
+              
+              console.log(`📄 分片 ${segmentIndex}: ${nextLine}`);
+              console.log(`   📋 Playlist时长: ${playlistDuration.toFixed(3)}s | 🎬 实际时长: ${actualDuration.toFixed(3)}s | ${diffIndicator} 差异: ${timeDiff.toFixed(3)}s`);
+              
+              totalPlaylistDuration += playlistDuration;
+              totalActualDuration += actualDuration;
+              segmentIndex++;
+            } catch (infoError) {
+              console.warn(`⚠️ 无法获取分片 ${nextLine} 的视频信息:`, infoError.message);
+              console.log(`📄 分片 ${segmentIndex}: ${nextLine} (Playlist时长: ${playlistDuration.toFixed(3)}s, 实际时长: 未知)`);
+              totalPlaylistDuration += playlistDuration;
+              segmentIndex++;
+            }
+          }
+        }
+      }
+      
+      const totalTimeDiff = Math.abs(totalPlaylistDuration - totalActualDuration);
+      const totalDiffIndicator = totalTimeDiff > 0.5 ? '⚠️' : '✅';
+      
+      console.log(`🎯 播放列表汇总: 共 ${segmentIndex - 1} 个分片`);
+      console.log(`📋 Playlist总时长: ${totalPlaylistDuration.toFixed(2)}s | 🎬 实际总时长: ${totalActualDuration.toFixed(2)}s | ${totalDiffIndicator} 总差异: ${totalTimeDiff.toFixed(2)}s`);
+    } catch (error) {
+      console.warn('⚠️ 读取播放列表失败:', error.message);
+    }
+
+    // 🔧 生成concat列表文件用于MP4导出
+    console.log('🔧 生成concat列表文件...');
+    const concatListPath = await generateConcatList(outputPlaylistPath, outputDir);
+    
+    await runFfmpeg(concatListPath, outputMp4);
     console.log('✅ MP4导出完成:', outputMp4);
     
     // 上传MP4到S3
@@ -1088,7 +1146,12 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
 
     // 自动导出MP4
     const outputMp4 = join(outputDir, `${recordingId}.mp4`);
-    await runFfmpeg(outputPlaylistPath, outputMp4);
+    
+    // 🔧 生成concat列表文件用于MP4导出
+    console.log('🔧 生成concat列表文件...');
+    const concatListPath = await generateConcatList(outputPlaylistPath, outputDir);
+    
+    await runFfmpeg(concatListPath, outputMp4);
     console.log('✅ MP4导出完成:', outputMp4);
     
     // 上传MP4到S3
@@ -1134,10 +1197,43 @@ function getVideoInfo(filePath) {
   });
 }
 
-// 辅助函数：导出MP4
-async function runFfmpeg(inputM3U8, outputMp4) {
+// 辅助函数：从playlist.m3u8生成concat_list.txt
+async function generateConcatList(playlistPath, outputDir) {
+  const playlistContent = await readFile(playlistPath, 'utf8');
+  const lines = playlistContent.split('\n');
+  const tsFiles = [];
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line.startsWith('#EXTINF:')) {
+      const nextLine = lines[i + 1]?.trim();
+      if (nextLine && nextLine.endsWith('.ts')) {
+        tsFiles.push(nextLine);
+      }
+    }
+  }
+  
+  // 生成concat文件内容
+  const concatContent = tsFiles.map(filename => `file '${filename}'`).join('\n');
+  const concatListPath = join(outputDir, 'concat_list.txt');
+  
+  await writeFile(concatListPath, concatContent);
+  
+  console.log(`📝 生成concat列表文件: ${concatListPath}`);
+  console.log(`📋 包含 ${tsFiles.length} 个分片文件:`);
+  tsFiles.forEach((file, index) => {
+    console.log(`   ${index + 1}. ${file}`);
+  });
+  
+  return concatListPath;
+}
+
+// 辅助函数：导出MP4 - 使用concat模式
+async function runFfmpeg(concatListPath, outputMp4) {
   return new Promise((resolve, reject) => {
-    ffmpeg(inputM3U8)
+    ffmpeg()
+      .input(concatListPath)
+      .inputOptions(['-f', 'concat', '-safe', '0'])
       .outputOptions([
         "-c copy",
         "-movflags +faststart",
@@ -1146,7 +1242,7 @@ async function runFfmpeg(inputM3U8, outputMp4) {
         "-hide_banner",
         "-loglevel error",
       ])
-      .on("start", (cmd) => console.log("[ffmpeg mp4]", cmd))
+      .on("start", (cmd) => console.log("[ffmpeg concat mp4]", cmd))
       .on("error", reject)
       .on("end", resolve)
       .save(outputMp4);
