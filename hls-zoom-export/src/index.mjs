@@ -411,17 +411,8 @@ async function processTrim({ inputDir, outputDir, playlistPath, recordingId, tri
   await mkdir(tempDir, { recursive: true });
 
   try {
-    // 0. 拷贝所有原始文件到输出目录
-    console.log("📋 拷贝原始文件到输出目录...");
-    const inputFiles = await readdir(inputDir);
-    for (const file of inputFiles) {
-      const sourcePath = join(inputDir, file);
-      const destPath = join(outputDir, file);
-      await cp(sourcePath, destPath);
-    }
-    console.log("✅ 原始文件拷贝完成");
-
-    // 1. 解析M3U8播放列表，提取分片信息
+    // 0. 先解析M3U8播放列表，确定需要哪些分片
+    console.log("📋 解析M3U8播放列表，确定需要的分片...");
     const playlistContent = await readFile(playlistPath, 'utf8');
     const lines = playlistContent.split('\n');
     const segmentInfo = [];
@@ -448,7 +439,26 @@ async function processTrim({ inputDir, outputDir, playlistPath, recordingId, tri
       }
     }
 
-    // 2. 处理每个 trim 区间
+    // 1. 确定需要的分片文件
+    const neededSegments = new Set();
+    for (const trim of trims) {
+      const overlappingSegs = segmentInfo.filter(seg => seg.endTime > trim.start && seg.startTime < trim.end);
+      overlappingSegs.forEach(seg => neededSegments.add(seg.filename));
+    }
+
+    // 2. 只拷贝需要的文件到输出目录
+    console.log("📋 拷贝需要的文件到输出目录...");
+    const inputFiles = await readdir(inputDir);
+    for (const file of inputFiles) {
+      if (!file.endsWith('.ts') || neededSegments.has(file)) {
+        const sourcePath = join(inputDir, file);
+        const destPath = join(outputDir, file);
+        await cp(sourcePath, destPath);
+      }
+    }
+    console.log(`✅ 拷贝完成，共拷贝 ${neededSegments.size} 个分片文件`);
+
+    // 3. 处理每个 trim 区间
     const trimmedSegments = [];
     for (let trimIndex = 0; trimIndex < trims.length; trimIndex++) {
       const { start, end } = trims[trimIndex];
@@ -515,7 +525,7 @@ async function processTrim({ inputDir, outputDir, playlistPath, recordingId, tri
       console.log(`✅ Trim ${trimIndex} 完成: ${duration.toFixed(3)}秒`);
     }
 
-    // 3. 拼接所有trim片段
+    // 4. 拼接所有trim片段
     const outputPlaylistPath = join(outputDir, 'playlist.m3u8');
     
     if (trimmedSegments.length > 0) {
@@ -535,7 +545,7 @@ async function processTrim({ inputDir, outputDir, playlistPath, recordingId, tri
           .run();
       });
 
-      // 4. 重建 playlist.m3u8
+      // 5. 重建 playlist.m3u8
       const totalDuration = trimmedSegments.reduce((sum, seg) => sum + seg.duration, 0);
       
       const newPlaylist = [
