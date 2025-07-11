@@ -1238,6 +1238,17 @@ async function uploadAllToS3(outputDir, spec) {
   console.log(`🎯 S3上传前缀: ${s3Prefix}`);
   
   try {
+    // 🧹 清理无用文件：仅保留playlist.m3u8中引用的TS分片
+    console.log('🧹 开始清理无用文件...');
+    const playlistPath = join(outputDir, 'playlist.m3u8');
+    await cleanupUnusedTSFilesFromFinalPlaylist(playlistPath, outputDir);
+    
+    // 📋 输出最终上传清单
+    const files = await readdir(outputDir);
+    const hlsFiles = files.filter(file => file.endsWith('.ts') || file.endsWith('.m3u8'));
+    const tsCount = hlsFiles.filter(file => file.endsWith('.ts')).length;
+    console.log(`📋 最终上传清单: playlist.m3u8 + ${tsCount} 个 TS 分片 + MP4`);
+    
     // 1. 上传所有HLS文件（TS分片和playlist.m3u8）
     console.log('📤 开始上传HLS文件到S3...');
     await uploadFolderToS3(outputDir, s3Prefix);
@@ -1245,7 +1256,6 @@ async function uploadAllToS3(outputDir, spec) {
     
     // 2. 生成并上传MP4文件
     console.log('🎬 开始生成MP4文件...');
-    const playlistPath = join(outputDir, 'playlist.m3u8');
     const outputMp4 = join(outputDir, `${spec.recordingId}.mp4`);
     
     // 生成concat列表文件
