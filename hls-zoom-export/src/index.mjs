@@ -169,6 +169,11 @@ export const handler = async (event) => {
       await copyOriginalFiles(segDir, finalOutputDir);
       console.log("✅ 文件拷贝完成");
     }
+    
+    // 📤 统一上传所有文件到S3
+    console.log("📤 开始统一上传流程...");
+    const uploadResult = await uploadAllToS3(finalOutputDir, spec);
+    console.log("✅ 统一上传流程完成");
   
     // ✅ 构造回调 JSON
     const resultPayload = {
@@ -180,22 +185,22 @@ export const handler = async (event) => {
     // 根据实际使用的功能设置不同的回调数据
     if (spec.trims && spec.trims.length > 0 && spec.zooms && spec.zooms.length > 0) {
       // 先裁剪再缩放功能的回调数据
-      resultPayload.outputHls = `${spec.outputS3Prefix}/${spec.recordingId}_trimmed_zoomed/playlist.m3u8`;
+      resultPayload.outputHls = uploadResult.hlsPrefix + '/playlist.m3u8';
       resultPayload.trims = spec.trims;
       resultPayload.zooms = spec.zooms;
       resultPayload.totalDuration = spec.trims.reduce((total, trim) => total + (trim.end - trim.start), 0);
     } else if (spec.trims && spec.trims.length > 0) {
       // 只裁剪功能的回调数据
-      resultPayload.outputHls = `${spec.outputS3Prefix}/${spec.recordingId}_trimmed/playlist.m3u8`;
+      resultPayload.outputHls = uploadResult.hlsPrefix + '/playlist.m3u8';
       resultPayload.trims = spec.trims;
       resultPayload.totalDuration = spec.trims.reduce((total, trim) => total + (trim.end - trim.start), 0);
     } else if (spec.zooms && spec.zooms.length > 0) {
       // 只缩放功能的回调数据
-      resultPayload.outputHls = `${spec.outputS3Prefix}/${spec.recordingId}_zoomed/playlist.m3u8`;
+      resultPayload.outputHls = uploadResult.hlsPrefix + '/playlist.m3u8';
       resultPayload.zooms = spec.zooms;
     } else {
       // 无处理功能的回调数据
-      resultPayload.outputHls = `${spec.outputS3Prefix}/${spec.recordingId}/playlist.m3u8`;
+      resultPayload.outputHls = uploadResult.hlsPrefix + '/playlist.m3u8';
     }
   
     if (spec.callbackUrl) {
@@ -487,7 +492,6 @@ async function uploadFolderToS3(folder, s3Prefix) {
     }));
   }
 }
-
 
 // 🔍 高效 Trim 处理函数 - 只对边界分片转码，中间分片直接复用
 async function processTrimFast({ inputDir, outputDir, playlistPath, recordingId, trims, lowQuality, spec }) {
@@ -965,27 +969,6 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
     newLines.push('#EXT-X-ENDLIST');
     await writeFile(outputPlaylistPath, newLines.join('\n'));
     console.log('✅ 多段Zoom处理完成！');
-
-    // 上传 Zoom 后的 HLS 文件夹
-    const hlsOutputPrefix = `${spec.outputS3Prefix}/${spec.recordingId}_zoomed`;
-    console.log('📤 开始上传HLS到S3...', hlsOutputPrefix);
-    await uploadFolderToS3(outputDir, hlsOutputPrefix);
-    console.log('✅ HLS上传完成:', hlsOutputPrefix);
-
-    // 自动导出MP4
-    const outputMp4 = join(outputDir, `${recordingId}.mp4`);
-    
-    // 🔧 生成concat列表文件用于MP4导出
-    console.log('🔧 生成concat列表文件...');
-    const concatListPath = await generateConcatList(outputPlaylistPath, outputDir);
-    
-    await runFfmpeg(concatListPath, outputMp4);
-    console.log('✅ MP4导出完成:', outputMp4);
-    
-    // 上传MP4到S3
-    console.log('📤 开始上传MP4到S3...');
-    await uploadMp4ToS3(outputMp4, spec);
-    console.log('✅ MP4上传完成:', `${spec.outputS3Prefix}/${spec.recordingId}.mp4`);
   } finally {
     try { 
       await rm(tempDir, { recursive: true, force: true }); 
@@ -1243,6 +1226,65 @@ async function cleanupUnusedTSFilesFromFinalPlaylist(finalPlaylistPath, outputDi
   }
   
   console.log(`🎯 清理完成: 删除了 ${deletedCount} 个无用文件，保留了 ${keepFiles.length} 个标准HLS分片`);
+}
+
+// 📤 统一上传函数：使用现有函数组合上传所有文件到S3
+async function uploadAllToS3(outputDir, spec) {
+  console.log(`📤 开始统一上传到S3，使用_Edited后缀`);
+  
+  // 使用_Edited后缀的S3前缀路径
+  const s3Prefix = `${spec.outputS3Prefix}/${spec.recordingId}_Edited`;
+  
+  console.log(`🎯 S3上传前缀: ${s3Prefix}`);
+  
+  try {
+    // 1. 上传所有HLS文件（TS分片和playlist.m3u8）
+    console.log('📤 开始上传HLS文件到S3...');
+    await uploadFolderToS3(outputDir, s3Prefix);
+    console.log(`🎉 HLS文件上传完成: ${s3Prefix}`);
+    
+    // 2. 生成并上传MP4文件
+    console.log('🎬 开始生成MP4文件...');
+    const playlistPath = join(outputDir, 'playlist.m3u8');
+    const outputMp4 = join(outputDir, `${spec.recordingId}.mp4`);
+    
+    // 生成concat列表文件
+    console.log('📝 生成concat列表文件...');
+    const concatListPath = await generateConcatList(playlistPath, outputDir);
+    
+    // 执行MP4导出
+    console.log('🔄 执行MP4导出...');
+    await runFfmpeg(concatListPath, outputMp4);
+    console.log('✅ MP4文件生成完成');
+    
+    // 上传MP4文件
+    console.log('📤 开始上传MP4文件到S3...');
+    await uploadMp4ToS3(outputMp4, spec);
+    console.log(`✅ MP4文件上传成功: ${spec.outputS3Prefix}/${spec.recordingId}.mp4`);
+    
+    // 3. 清理临时文件
+    console.log('🧹 清理临时文件...');
+    try {
+      await rm(concatListPath, { force: true });
+      console.log('✅ 清理concat列表文件完成');
+    } catch (e) {
+      console.warn('⚠️ 清理concat列表文件失败:', e.message);
+    }
+    
+    console.log(`🎉 统一上传完成！`);
+    console.log(`📊 上传摘要:`);
+    console.log(`   - HLS前缀: s3://${S3_BUCKET}/${s3Prefix}/`);
+    console.log(`   - MP4路径: s3://${S3_BUCKET}/${spec.outputS3Prefix}/${spec.recordingId}.mp4`);
+    
+    return {
+      hlsPrefix: s3Prefix,
+      mp4Key: `${spec.outputS3Prefix}/${spec.recordingId}.mp4`
+    };
+    
+  } catch (error) {
+    console.error('❌ 统一上传失败:', error);
+    throw error;
+  }
 }
 
 const ok = (body) => ({ statusCode: 200, body: JSON.stringify(body) });
