@@ -60,7 +60,7 @@ export const handler = async (event) => {
   const workDir = `/tmp/${spec.recordingId}`;
   const segDir = join(workDir, 'segments');
   const playlistPath = join(segDir, 'playlist.m3u8');
-  const outputDir = `${workDir}_zoomed`;
+  const outputDir = `${workDir}_Edited`;
 
   try {
     console.log("📁 创建目录...");
@@ -492,11 +492,9 @@ async function processTrimFast({ inputDir, outputDir, playlistPath, recordingId,
       
       await writeFile(outputPlaylistPath, emptyPlaylist);
       console.log('⚠️ 没有成功的trim片段，创建空playlist');
-        }
+    }
 
     // 🔧 两阶段封装：解决播放不连续问题
-    console.log('🔧 开始两阶段封装处理，解决播放不连续问题...');
-    
     try {
       // 第一步：生成concat列表文件
       console.log('📝 第一步：生成concat列表文件...');
@@ -513,10 +511,17 @@ async function processTrimFast({ inputDir, outputDir, playlistPath, recordingId,
       const finalPlaylistPath = join(outputDir, 'final_playlist.m3u8');
       
       await convertMP4ToHLS(mergedMp4Path, finalPlaylistPath, outputDir);
+
+      // 🧹 清理无用的原始TS文件（保留final_playlist.m3u8中的标准HLS分片）
+      console.log('🧹 清理无用的原始TS文件...');
+      await cleanupUnusedTSFilesFromFinalPlaylist(finalPlaylistPath, outputDir);
+      console.log('✅ 原始TS文件清理完成');
       
-      // 第四步：替换原播放列表
-      console.log('🔄 第四步：更新播放列表...');
-      await cp(finalPlaylistPath, outputPlaylistPath);
+      // 第四步：重命名最终播放列表
+      console.log('🔄 第四步：重命名最终播放列表...');
+      await rm(outputPlaylistPath, { force: true }); // 删除旧的playlist.m3u8
+      await cp(finalPlaylistPath, outputPlaylistPath); // 复制final_playlist.m3u8为playlist.m3u8
+      await rm(finalPlaylistPath, { force: true }); // 删除final_playlist.m3u8
       
       // 清理临时文件
       await rm(mergedMp4Path, { force: true });
@@ -1109,6 +1114,49 @@ async function convertMP4ToHLS(inputMP4Path, outputPlaylistPath, outputDir) {
       .on('error', reject)
       .run();
   });
+}
+
+// 🧹 清理无用的原始TS文件（基于final_playlist.m3u8）
+async function cleanupUnusedTSFilesFromFinalPlaylist(finalPlaylistPath, outputDir) {
+  console.log('🔍 分析final_playlist.m3u8文件:', finalPlaylistPath);
+  
+  // 读取final_playlist.m3u8文件内容
+  const playlistContent = await readFile(finalPlaylistPath, 'utf8');
+  console.log('📋 final_playlist.m3u8内容:', playlistContent.substring(0, 200) + '...');
+  
+  // 提取需要保留的TS文件名
+  const keepFiles = [];
+  const lines = playlistContent.split('\n');
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    // 查找以.ts结尾的文件名行
+    if (trimmedLine && !trimmedLine.startsWith('#') && trimmedLine.endsWith('.ts')) {
+      keepFiles.push(trimmedLine);
+    }
+  }
+  
+  console.log(`📝 需要保留的标准HLS分片: [${keepFiles.join(', ')}]`);
+  
+  // 扫描输出目录中的所有文件
+  const outputFiles = await readdir(outputDir);
+  const tsFiles = outputFiles.filter(file => file.endsWith('.ts'));
+  
+  console.log(`📁 输出目录中的TS文件: [${tsFiles.join(', ')}]`);
+  
+  // 删除不在保留列表中的TS文件
+  let deletedCount = 0;
+  for (const file of tsFiles) {
+    if (!keepFiles.includes(file)) {
+      const fullPath = join(outputDir, file);
+      console.log(`🗑️ 删除无用的原始TS文件: ${file}`);
+      await rm(fullPath, { force: true });
+      deletedCount++;
+    } else {
+      console.log(`✅ 保留标准HLS分片: ${file}`);
+    }
+  }
+  
+  console.log(`🎯 清理完成: 删除了 ${deletedCount} 个无用文件，保留了 ${keepFiles.length} 个标准HLS分片`);
 }
 
 const ok = (body) => ({ statusCode: 200, body: JSON.stringify(body) });
