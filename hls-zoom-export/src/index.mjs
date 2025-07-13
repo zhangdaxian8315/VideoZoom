@@ -386,6 +386,41 @@ function parseS3Url(input) {
 async function buildLocalPlaylist(manifestUrl, segDir, playlistPath, cloudFrontVideoCookie) {
   console.log("🔗 解析 manifest URL:", manifestUrl);
 
+  // 🔍 检查目标目录是否已经存在必要的文件
+  console.log("🔍 检查目标目录是否已存在文件...");
+  try {
+    const existingFiles = await readdir(segDir);
+    const hasPlaylist = existingFiles.includes('playlist.m3u8');
+    const hasTsFiles = existingFiles.some(file => file.endsWith('.ts'));
+    
+    if (hasPlaylist && hasTsFiles) {
+      console.log("✅ 目标目录已存在 playlist.m3u8 和 TS 文件，跳过下载");
+      console.log(`📁 现有文件: ${existingFiles.join(', ')}`);
+      
+      // 验证playlist.m3u8文件是否完整
+      const playlistContent = await readFile(playlistPath, 'utf8');
+      const tsFilesInPlaylist = playlistContent.split('\n')
+        .filter(line => line.trim() && !line.startsWith('#') && line.endsWith('.ts'));
+      
+      console.log(`📋 playlist.m3u8 中引用的 TS 文件: ${tsFilesInPlaylist.length} 个`);
+      
+      // 检查所有引用的TS文件是否都存在
+      const missingFiles = tsFilesInPlaylist.filter(tsFile => !existingFiles.includes(tsFile));
+      
+      if (missingFiles.length === 0) {
+        console.log("✅ 所有引用的 TS 文件都存在，直接使用现有文件");
+        return;
+      } else {
+        console.log(`⚠️ 发现缺失的 TS 文件: ${missingFiles.join(', ')}`);
+        console.log("🔄 继续下载缺失的文件...");
+      }
+    } else {
+      console.log("📥 目标目录为空或文件不完整，开始下载...");
+    }
+  } catch (error) {
+    console.log("📁 目标目录不存在，开始下载...");
+  }
+
   const {
     Policy,
     Signature,
@@ -423,9 +458,20 @@ async function buildLocalPlaylist(manifestUrl, segDir, playlistPath, cloudFrontV
     const signed = absolute + (absolute.includes("?") ? "&" : "?") + query;
     const localName = `${String(segIndex++).padStart(5, "0")}.ts`;
 
+    // 🔍 检查单个文件是否已存在
+    const localFilePath = join(segDir, localName);
+    try {
+      await stat(localFilePath);
+      console.log(`✅ 文件已存在，跳过下载: ${localName}`);
+      localLines.push(localName);
+      continue;
+    } catch (error) {
+      // 文件不存在，继续下载
+    }
+
     console.log(`📥 下载片段 ${segIndex}: ${absolute} -> ${localName}`);
     console.log(`🔗 签名URL: ${signed.substring(0, 100)}...`);
-    await downloadFile(signed, join(segDir, localName));
+    await downloadFile(signed, localFilePath);
     localLines.push(localName);
   }
 
@@ -584,63 +630,8 @@ async function processTrimFast({ inputDir, outputDir, playlistPath, recordingId,
       console.log('⚠️ 没有成功的trim片段，创建空playlist');
     }
 
-    // 🔧 两阶段封装：解决播放不连续问题
-    try {
-      // 第一步：生成concat列表文件
-      console.log('📝 第一步：生成concat列表文件...');
-      const concatListPath = await generateConcatList(outputPlaylistPath, outputDir);
-      
-      // 第二步：合并成连续的MP4文件
-      console.log('🎬 第二步：合并分片为连续MP4...');
-      const mergedMp4Path = join(outputDir, 'merged_continuous.mp4');
-      
-      await mergeMP4WithTimestampOptimization(concatListPath, mergedMp4Path);
-      
-      // 第三步：将连续MP4重新切分成标准TS分片
-      console.log('✂️ 第三步：重新切分为标准HLS分片...');
-      const finalPlaylistPath = join(outputDir, 'final_playlist.m3u8');
-      
-      await convertMP4ToHLS(mergedMp4Path, finalPlaylistPath, outputDir);
-
-      // 🧹 清理无用的原始TS文件（保留final_playlist.m3u8中的标准HLS分片）
-      console.log('🧹 清理无用的原始TS文件...');
-      await cleanupUnusedTSFilesFromFinalPlaylist(finalPlaylistPath, outputDir);
-      console.log('✅ 原始TS文件清理完成');
-      
-      // 第四步：重命名最终播放列表
-      console.log('🔄 第四步：重命名最终播放列表...');
-      await rm(outputPlaylistPath, { force: true }); // 删除旧的playlist.m3u8
-      await cp(finalPlaylistPath, outputPlaylistPath); // 复制final_playlist.m3u8为playlist.m3u8
-      await rm(finalPlaylistPath, { force: true }); // 删除final_playlist.m3u8
-      
-      // 清理临时文件
-      await rm(mergedMp4Path, { force: true });
-      await rm(concatListPath, { force: true });
-      
-      console.log('🎉 两阶段封装完成！播放连续性已优化');
-      
-    } catch (error) {
-      console.warn('⚠️ 两阶段封装失败，回退到原始流程:', error.message);
-    }
-
-    // 上传 Trim 后的 HLS 文件夹
-    // const hlsOutputPrefix = `${spec.outputS3Prefix}/${spec.recordingId}_trimmed`;
-    // console.log('📤 开始上传HLS到S3...', hlsOutputPrefix);
-    // await uploadFolderToS3(outputDir, hlsOutputPrefix);
-    // console.log('✅ HLS上传完成:', hlsOutputPrefix);
-
-    // // 4. 自动导出MP4
-    // const outputMp4 = join(outputDir, `${recordingId}.mp4`);
-    // console.log('🎬 开始导出MP4...');
-    // const concatListPath = await generateConcatList(outputPlaylistPath, outputDir);
-    
-    // await runFfmpeg(concatListPath, outputMp4);
-    // console.log('✅ MP4导出完成:', outputMp4);
-    
-    // // 上传MP4到S3
-    // console.log('📤 开始上传MP4到S3...');
-    // await uploadMp4ToS3(outputMp4, spec);
-    // console.log('✅ MP4上传完成:', `${spec.outputS3Prefix}/${spec.recordingId}.mp4`);
+    // 🔧 调用公用函数解决PTS不连续问题
+    await fixPTSContinuity(outputPlaylistPath, outputDir);
   } finally {
     try { 
       await rm(tempDir, { recursive: true, force: true }); 
@@ -969,6 +960,9 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
     newLines.push('#EXT-X-ENDLIST');
     await writeFile(outputPlaylistPath, newLines.join('\n'));
     console.log('✅ 多段Zoom处理完成！');
+    
+    // 🔧 调用公用函数解决PTS不连续问题
+    await fixPTSContinuity(outputPlaylistPath, outputDir);
   } finally {
     try { 
       await rm(tempDir, { recursive: true, force: true }); 
@@ -1299,3 +1293,46 @@ async function uploadAllToS3(outputDir, spec) {
 
 const ok = (body) => ({ statusCode: 200, body: JSON.stringify(body) });
 const error = (c, m) => ({ statusCode: c, body: m });
+
+// 🔧 公用函数：解决PTS不连续问题
+async function fixPTSContinuity(outputPlaylistPath, outputDir) {
+  console.log('🔧 开始解决PTS不连续问题...');
+  
+  try {
+    // 第一步：生成concat列表文件
+    console.log('📝 第一步：生成concat列表文件...');
+    const concatListPath = await generateConcatList(outputPlaylistPath, outputDir);
+    
+    // 第二步：合并成连续的MP4文件
+    console.log('🎬 第二步：合并分片为连续MP4...');
+    const mergedMp4Path = join(outputDir, 'merged_continuous.mp4');
+    
+    await mergeMP4WithTimestampOptimization(concatListPath, mergedMp4Path);
+    
+    // 第三步：将连续MP4重新切分成标准TS分片
+    console.log('✂️ 第三步：重新切分为标准HLS分片...');
+    const finalPlaylistPath = join(outputDir, 'final_playlist.m3u8');
+    
+    await convertMP4ToHLS(mergedMp4Path, finalPlaylistPath, outputDir);
+
+    // 🧹 清理无用的原始TS文件（保留final_playlist.m3u8中的标准HLS分片）
+    console.log('🧹 清理无用的原始TS文件...');
+    await cleanupUnusedTSFilesFromFinalPlaylist(finalPlaylistPath, outputDir);
+    console.log('✅ 原始TS文件清理完成');
+    
+    // 第四步：重命名最终播放列表
+    console.log('🔄 第四步：重命名最终播放列表...');
+    await rm(outputPlaylistPath, { force: true }); // 删除旧的playlist.m3u8
+    await cp(finalPlaylistPath, outputPlaylistPath); // 复制final_playlist.m3u8为playlist.m3u8
+    await rm(finalPlaylistPath, { force: true }); // 删除final_playlist.m3u8
+    
+    // 清理临时文件
+    await rm(mergedMp4Path, { force: true });
+    await rm(concatListPath, { force: true });
+    
+    console.log('🎉 PTS连续性修复完成！播放连续性已优化');
+    
+  } catch (error) {
+    console.warn('⚠️ PTS连续性修复失败，回退到原始流程:', error.message);
+  }
+}
