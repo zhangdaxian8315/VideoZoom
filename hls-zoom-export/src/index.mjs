@@ -82,92 +82,185 @@ export const handler = async (event) => {
       console.log("📄 Playlist 内容预览:", playlistContent.substring(0, 200) + "...");
     }
   
-    // 2. 执行处理逻辑（支持：只裁剪、只缩放、先裁剪再缩放）
+    // 2. 执行处理逻辑（支持：只裁剪、只缩放、根据配置选择处理顺序）
     let hasTrimmed = false;
+    let hasZoomed = false;
     let currentInputDir = segDir;
     let currentPlaylistPath = playlistPath;
     let finalOutputDir = outputDir; // 最终输出目录
     
-    // 第一步：如果有trims，先执行裁剪
-    if (spec.trims && spec.trims.length > 0) {
-      console.log("✂️ 开始 Trim 处理...");
+    // 🔧 根据时间线配置决定处理顺序
+    if (spec.useOriginalTimeline) {
+      // 🎯 使用原始时间线：先缩放后裁剪
+      console.log("🎯 使用原始时间线：先缩放后裁剪");
       
-      // 为裁剪步骤创建独立的临时目录
-      const trimOutputDir = spec.zooms && spec.zooms.length > 0 
-        ? `/tmp/${spec.recordingId}_trimmed` 
-        : finalOutputDir; // 如果只有裁剪，直接输出到最终目录
-      
-      if (trimOutputDir !== finalOutputDir) {
-        await mkdir(trimOutputDir, { recursive: true });
-      }
-      
-      await processTrimFast({
-        inputDir: currentInputDir,
-        outputDir: trimOutputDir,
-        playlistPath: currentPlaylistPath,
-        recordingId: spec.recordingId,
-        trims: spec.trims,
-        lowQuality: spec.lowQuality === 'true' ? true : false,
-        spec,
-      });
-      console.log("✅ Trim 处理完成");
-      
-      // 更新输入目录和播放列表路径，为后续缩放做准备
-      hasTrimmed = true;
-      currentInputDir = trimOutputDir;
-      currentPlaylistPath = join(trimOutputDir, 'playlist.m3u8');
-    }
-    
-    // 第二步：如果有zooms，执行缩放（基于裁剪后的结果或原始文件）
-    if (spec.zooms && spec.zooms.length > 0) {
-      console.log("🎬 开始 Zoom 处理...");
-      
-      // 为缩放步骤创建独立的临时目录
-      const zoomOutputDir = hasTrimmed 
-        ? `/tmp/${spec.recordingId}_zoomed` 
-        : finalOutputDir; // 如果只有缩放，直接输出到最终目录
-      
-      if (zoomOutputDir !== finalOutputDir) {
-        await mkdir(zoomOutputDir, { recursive: true });
-      }
-      
-      await processZoom({
-        inputDir: currentInputDir,
-        outputDir: zoomOutputDir,
-        playlistPath: currentPlaylistPath,
-        recordingId: spec.recordingId,
-        zooms: spec.zooms,
-        lowQuality: spec.lowQuality === 'true' ? true : false,
-        spec,
-      });
-      console.log("✅ Zoom 处理完成");
-      
-      // 如果是先裁剪再缩放，需要将最终结果复制到最终目录
-      if (hasTrimmed) {
-        console.log("🔄 将最终结果复制到最终目录...");
-        await copyFinalResultToOutputDir(zoomOutputDir, finalOutputDir);
-        console.log("✅ 最终结果复制完成");
+      // 第一步：如果有zooms，先执行缩放（在原始时间轴上）
+      if (spec.zooms && spec.zooms.length > 0) {
+        console.log("🎬 开始 Zoom 处理（原始时间轴）...");
         
-        // 清理临时目录
-        console.log("🧹 清理临时目录...");
-        try {
-          await rm(trimOutputDir, { recursive: true, force: true });
-          console.log(`✅ 清理临时目录: ${trimOutputDir}`);
-        } catch (e) {
-          console.warn(`⚠️ 清理临时目录失败: ${e.message}`);
+        // 为缩放步骤创建独立的临时目录
+        const zoomOutputDir = spec.trims && spec.trims.length > 0 
+          ? `/tmp/${spec.recordingId}_zoomed` 
+          : finalOutputDir; // 如果只有缩放，直接输出到最终目录
+        
+        if (zoomOutputDir !== finalOutputDir) {
+          await mkdir(zoomOutputDir, { recursive: true });
         }
-        try {
-          await rm(zoomOutputDir, { recursive: true, force: true });
-          console.log(`✅ 清理临时目录: ${zoomOutputDir}`);
-        } catch (e) {
-          console.warn(`⚠️ 清理临时目录失败: ${e.message}`);
-        }
+        
+        await processZoom({
+          inputDir: currentInputDir,
+          outputDir: zoomOutputDir,
+          playlistPath: currentPlaylistPath,
+          recordingId: spec.recordingId,
+          zooms: spec.zooms,
+          lowQuality: spec.lowQuality === 'true' ? true : false,
+          spec,
+        });
+        console.log("✅ Zoom 处理完成");
+        
+        // 更新输入目录和播放列表路径，为后续裁剪做准备
+        hasZoomed = true;
+        currentInputDir = zoomOutputDir;
+        currentPlaylistPath = join(zoomOutputDir, 'playlist.m3u8');
       }
-    } else if (!hasTrimmed) {
-      // 如果既没有trims也没有zooms，直接拷贝原始文件
-      console.log("📋 没有处理参数，直接拷贝原始文件...");
-      await copyOriginalFiles(segDir, finalOutputDir);
-      console.log("✅ 文件拷贝完成");
+      
+      // 第二步：如果有trims，执行裁剪（基于缩放后的结果或原始文件）
+      if (spec.trims && spec.trims.length > 0) {
+        console.log("✂️ 开始 Trim 处理...");
+        
+        // 为裁剪步骤创建独立的临时目录
+        const trimOutputDir = hasZoomed 
+          ? `/tmp/${spec.recordingId}_trimmed` 
+          : finalOutputDir; // 如果只有裁剪，直接输出到最终目录
+        
+        if (trimOutputDir !== finalOutputDir) {
+          await mkdir(trimOutputDir, { recursive: true });
+        }
+        
+        await processTrimFast({
+          inputDir: currentInputDir,
+          outputDir: trimOutputDir,
+          playlistPath: currentPlaylistPath,
+          recordingId: spec.recordingId,
+          trims: spec.trims,
+          lowQuality: spec.lowQuality === 'true' ? true : false,
+          spec,
+        });
+        console.log("✅ Trim 处理完成");
+        
+        // 如果是先缩放再裁剪，需要将最终结果复制到最终目录
+        if (hasZoomed) {
+          console.log("🔄 将最终结果复制到最终目录...");
+          await copyFinalResultToOutputDir(trimOutputDir, finalOutputDir);
+          console.log("✅ 最终结果复制完成");
+          
+          // 清理临时目录
+          console.log("🧹 清理临时目录...");
+          try {
+            await rm(zoomOutputDir, { recursive: true, force: true });
+            console.log(`✅ 清理临时目录: ${zoomOutputDir}`);
+          } catch (e) {
+            console.warn(`⚠️ 清理临时目录失败: ${e.message}`);
+          }
+          try {
+            await rm(trimOutputDir, { recursive: true, force: true });
+            console.log(`✅ 清理临时目录: ${trimOutputDir}`);
+          } catch (e) {
+            console.warn(`⚠️ 清理临时目录失败: ${e.message}`);
+          }
+        }
+      } else if (!hasZoomed) {
+        // 如果既没有zooms也没有trims，直接拷贝原始文件
+        console.log("📋 没有处理参数，直接拷贝原始文件...");
+        await copyOriginalFiles(segDir, finalOutputDir);
+        console.log("✅ 文件拷贝完成");
+      }
+      
+    } else {
+      // 🎯 使用新时间线：先裁剪后缩放（保持原有逻辑）
+      console.log("🎯 使用新时间线：先裁剪后缩放");
+      
+      // 第一步：如果有trims，先执行裁剪
+      if (spec.trims && spec.trims.length > 0) {
+        console.log("✂️ 开始 Trim 处理...");
+        
+        // 为裁剪步骤创建独立的临时目录
+        const trimOutputDir = spec.zooms && spec.zooms.length > 0 
+          ? `/tmp/${spec.recordingId}_trimmed` 
+          : finalOutputDir; // 如果只有裁剪，直接输出到最终目录
+        
+        if (trimOutputDir !== finalOutputDir) {
+          await mkdir(trimOutputDir, { recursive: true });
+        }
+        
+        await processTrimFast({
+          inputDir: currentInputDir,
+          outputDir: trimOutputDir,
+          playlistPath: currentPlaylistPath,
+          recordingId: spec.recordingId,
+          trims: spec.trims,
+          lowQuality: spec.lowQuality === 'true' ? true : false,
+          spec,
+        });
+        console.log("✅ Trim 处理完成");
+        
+        // 更新输入目录和播放列表路径，为后续缩放做准备
+        hasTrimmed = true;
+        currentInputDir = trimOutputDir;
+        currentPlaylistPath = join(trimOutputDir, 'playlist.m3u8');
+      }
+      
+      // 第二步：如果有zooms，执行缩放（基于裁剪后的结果或原始文件）
+      if (spec.zooms && spec.zooms.length > 0) {
+        console.log("🎬 开始 Zoom 处理...");
+        
+        // 为缩放步骤创建独立的临时目录
+        const zoomOutputDir = hasTrimmed 
+          ? `/tmp/${spec.recordingId}_zoomed` 
+          : finalOutputDir; // 如果只有缩放，直接输出到最终目录
+        
+        if (zoomOutputDir !== finalOutputDir) {
+          await mkdir(zoomOutputDir, { recursive: true });
+        }
+        
+        await processZoom({
+          inputDir: currentInputDir,
+          outputDir: zoomOutputDir,
+          playlistPath: currentPlaylistPath,
+          recordingId: spec.recordingId,
+          zooms: spec.zooms,
+          lowQuality: spec.lowQuality === 'true' ? true : false,
+          spec,
+        });
+        console.log("✅ Zoom 处理完成");
+        
+        // 如果是先裁剪再缩放，需要将最终结果复制到最终目录
+        if (hasTrimmed) {
+          console.log("🔄 将最终结果复制到最终目录...");
+          await copyFinalResultToOutputDir(zoomOutputDir, finalOutputDir);
+          console.log("✅ 最终结果复制完成");
+          
+          // 清理临时目录
+          console.log("🧹 清理临时目录...");
+          try {
+            await rm(trimOutputDir, { recursive: true, force: true });
+            console.log(`✅ 清理临时目录: ${trimOutputDir}`);
+          } catch (e) {
+            console.warn(`⚠️ 清理临时目录失败: ${e.message}`);
+          }
+          try {
+            await rm(zoomOutputDir, { recursive: true, force: true });
+            console.log(`✅ 清理临时目录: ${zoomOutputDir}`);
+          } catch (e) {
+            console.warn(`⚠️ 清理临时目录失败: ${e.message}`);
+          }
+        }
+      } else if (!hasTrimmed) {
+        // 如果既没有trims也没有zooms，直接拷贝原始文件
+        console.log("📋 没有处理参数，直接拷贝原始文件...");
+        await copyOriginalFiles(segDir, finalOutputDir);
+        console.log("✅ 文件拷贝完成");
+      }
     }
     
     // 📤 统一上传所有文件到S3
@@ -184,11 +277,16 @@ export const handler = async (event) => {
 
     // 根据实际使用的功能设置不同的回调数据
     if (spec.trims && spec.trims.length > 0 && spec.zooms && spec.zooms.length > 0) {
-      // 先裁剪再缩放功能的回调数据
+      // 根据时间线配置描述处理顺序
+      const processingOrder = spec.useOriginalTimeline ? '先缩放后裁剪' : '先裁剪后缩放';
+      console.log(`📋 处理顺序: ${processingOrder}`);
+      
       resultPayload.outputHls = uploadResult.hlsPrefix + '/playlist.m3u8';
       resultPayload.trims = spec.trims;
       resultPayload.zooms = spec.zooms;
       resultPayload.totalDuration = spec.trims.reduce((total, trim) => total + (trim.end - trim.start), 0);
+      resultPayload.processingOrder = processingOrder;
+      resultPayload.useOriginalTimeline = spec.useOriginalTimeline;
     } else if (spec.trims && spec.trims.length > 0) {
       // 只裁剪功能的回调数据
       resultPayload.outputHls = uploadResult.hlsPrefix + '/playlist.m3u8';
@@ -266,6 +364,11 @@ function parsePayload(raw) {
   
   console.log("✅ 所有必需字段检查通过");
   
+  // 🔧 解析时间线配置开关（默认使用原始时间线）
+  const useOriginalTimeline = body.useOriginalTimeline !== undefined ? body.useOriginalTimeline : true;
+  console.log(`🔧 时间线配置: useOriginalTimeline = ${useOriginalTimeline}`);
+  console.log(`📋 处理顺序: ${useOriginalTimeline ? '先缩放后裁剪（原始时间线）' : '先裁剪后缩放（新时间线）'}`);
+  
   // 🔍 参数校验逻辑（支持先裁剪再缩放）
   if (body.trims && Array.isArray(body.trims) && body.trims.length > 0) {
     // 校验 trims 参数
@@ -279,7 +382,11 @@ function parsePayload(raw) {
     console.log("✅ Zoom 参数校验通过");
   }
   
-  return body;
+  // 将配置开关添加到返回的对象中
+  return {
+    ...body,
+    useOriginalTimeline
+  };
 }
 
 function badRequest(msg) {
@@ -386,41 +493,6 @@ function parseS3Url(input) {
 async function buildLocalPlaylist(manifestUrl, segDir, playlistPath, cloudFrontVideoCookie) {
   console.log("🔗 解析 manifest URL:", manifestUrl);
 
-  // 🔍 检查目标目录是否已经存在必要的文件
-  console.log("🔍 检查目标目录是否已存在文件...");
-  try {
-    const existingFiles = await readdir(segDir);
-    const hasPlaylist = existingFiles.includes('playlist.m3u8');
-    const hasTsFiles = existingFiles.some(file => file.endsWith('.ts'));
-    
-    if (hasPlaylist && hasTsFiles) {
-      console.log("✅ 目标目录已存在 playlist.m3u8 和 TS 文件，跳过下载");
-      console.log(`📁 现有文件: ${existingFiles.join(', ')}`);
-      
-      // 验证playlist.m3u8文件是否完整
-      const playlistContent = await readFile(playlistPath, 'utf8');
-      const tsFilesInPlaylist = playlistContent.split('\n')
-        .filter(line => line.trim() && !line.startsWith('#') && line.endsWith('.ts'));
-      
-      console.log(`📋 playlist.m3u8 中引用的 TS 文件: ${tsFilesInPlaylist.length} 个`);
-      
-      // 检查所有引用的TS文件是否都存在
-      const missingFiles = tsFilesInPlaylist.filter(tsFile => !existingFiles.includes(tsFile));
-      
-      if (missingFiles.length === 0) {
-        console.log("✅ 所有引用的 TS 文件都存在，直接使用现有文件");
-        return;
-      } else {
-        console.log(`⚠️ 发现缺失的 TS 文件: ${missingFiles.join(', ')}`);
-        console.log("🔄 继续下载缺失的文件...");
-      }
-    } else {
-      console.log("📥 目标目录为空或文件不完整，开始下载...");
-    }
-  } catch (error) {
-    console.log("📁 目标目录不存在，开始下载...");
-  }
-
   const {
     Policy,
     Signature,
@@ -458,20 +530,9 @@ async function buildLocalPlaylist(manifestUrl, segDir, playlistPath, cloudFrontV
     const signed = absolute + (absolute.includes("?") ? "&" : "?") + query;
     const localName = `${String(segIndex++).padStart(5, "0")}.ts`;
 
-    // 🔍 检查单个文件是否已存在
-    const localFilePath = join(segDir, localName);
-    try {
-      await stat(localFilePath);
-      console.log(`✅ 文件已存在，跳过下载: ${localName}`);
-      localLines.push(localName);
-      continue;
-    } catch (error) {
-      // 文件不存在，继续下载
-    }
-
     console.log(`📥 下载片段 ${segIndex}: ${absolute} -> ${localName}`);
     console.log(`🔗 签名URL: ${signed.substring(0, 100)}...`);
-    await downloadFile(signed, localFilePath);
+    await downloadFile(signed, join(segDir, localName));
     localLines.push(localName);
   }
 
@@ -630,8 +691,63 @@ async function processTrimFast({ inputDir, outputDir, playlistPath, recordingId,
       console.log('⚠️ 没有成功的trim片段，创建空playlist');
     }
 
-    // 🔧 调用公用函数解决PTS不连续问题
-    await fixPTSContinuity(outputPlaylistPath, outputDir);
+    // 🔧 两阶段封装：解决播放不连续问题
+    try {
+      // 第一步：生成concat列表文件
+      console.log('📝 第一步：生成concat列表文件...');
+      const concatListPath = await generateConcatList(outputPlaylistPath, outputDir);
+      
+      // 第二步：合并成连续的MP4文件
+      console.log('🎬 第二步：合并分片为连续MP4...');
+      const mergedMp4Path = join(outputDir, 'merged_continuous.mp4');
+      
+      await mergeMP4WithTimestampOptimization(concatListPath, mergedMp4Path);
+      
+      // 第三步：将连续MP4重新切分成标准TS分片
+      console.log('✂️ 第三步：重新切分为标准HLS分片...');
+      const finalPlaylistPath = join(outputDir, 'final_playlist.m3u8');
+      
+      await convertMP4ToHLS(mergedMp4Path, finalPlaylistPath, outputDir);
+
+      // 🧹 清理无用的原始TS文件（保留final_playlist.m3u8中的标准HLS分片）
+      console.log('🧹 清理无用的原始TS文件...');
+      await cleanupUnusedTSFilesFromFinalPlaylist(finalPlaylistPath, outputDir);
+      console.log('✅ 原始TS文件清理完成');
+      
+      // 第四步：重命名最终播放列表
+      console.log('🔄 第四步：重命名最终播放列表...');
+      await rm(outputPlaylistPath, { force: true }); // 删除旧的playlist.m3u8
+      await cp(finalPlaylistPath, outputPlaylistPath); // 复制final_playlist.m3u8为playlist.m3u8
+      await rm(finalPlaylistPath, { force: true }); // 删除final_playlist.m3u8
+      
+      // 清理临时文件
+      await rm(mergedMp4Path, { force: true });
+      await rm(concatListPath, { force: true });
+      
+      console.log('🎉 两阶段封装完成！播放连续性已优化');
+      
+    } catch (error) {
+      console.warn('⚠️ 两阶段封装失败，回退到原始流程:', error.message);
+    }
+
+    // 上传 Trim 后的 HLS 文件夹
+    // const hlsOutputPrefix = `${spec.outputS3Prefix}/${spec.recordingId}_trimmed`;
+    // console.log('📤 开始上传HLS到S3...', hlsOutputPrefix);
+    // await uploadFolderToS3(outputDir, hlsOutputPrefix);
+    // console.log('✅ HLS上传完成:', hlsOutputPrefix);
+
+    // // 4. 自动导出MP4
+    // const outputMp4 = join(outputDir, `${recordingId}.mp4`);
+    // console.log('🎬 开始导出MP4...');
+    // const concatListPath = await generateConcatList(outputPlaylistPath, outputDir);
+    
+    // await runFfmpeg(concatListPath, outputMp4);
+    // console.log('✅ MP4导出完成:', outputMp4);
+    
+    // // 上传MP4到S3
+    // console.log('📤 开始上传MP4到S3...');
+    // await uploadMp4ToS3(outputMp4, spec);
+    // console.log('✅ MP4上传完成:', `${spec.outputS3Prefix}/${spec.recordingId}.mp4`);
   } finally {
     try { 
       await rm(tempDir, { recursive: true, force: true }); 
@@ -960,9 +1076,6 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
     newLines.push('#EXT-X-ENDLIST');
     await writeFile(outputPlaylistPath, newLines.join('\n'));
     console.log('✅ 多段Zoom处理完成！');
-    
-    // 🔧 调用公用函数解决PTS不连续问题
-    await fixPTSContinuity(outputPlaylistPath, outputDir);
   } finally {
     try { 
       await rm(tempDir, { recursive: true, force: true }); 
@@ -1294,45 +1407,29 @@ async function uploadAllToS3(outputDir, spec) {
 const ok = (body) => ({ statusCode: 200, body: JSON.stringify(body) });
 const error = (c, m) => ({ statusCode: c, body: m });
 
-// 🔧 公用函数：解决PTS不连续问题
-async function fixPTSContinuity(outputPlaylistPath, outputDir) {
-  console.log('🔧 开始解决PTS不连续问题...');
-  
-  try {
-    // 第一步：生成concat列表文件
-    console.log('📝 第一步：生成concat列表文件...');
-    const concatListPath = await generateConcatList(outputPlaylistPath, outputDir);
-    
-    // 第二步：合并成连续的MP4文件
-    console.log('🎬 第二步：合并分片为连续MP4...');
-    const mergedMp4Path = join(outputDir, 'merged_continuous.mp4');
-    
-    await mergeMP4WithTimestampOptimization(concatListPath, mergedMp4Path);
-    
-    // 第三步：将连续MP4重新切分成标准TS分片
-    console.log('✂️ 第三步：重新切分为标准HLS分片...');
-    const finalPlaylistPath = join(outputDir, 'final_playlist.m3u8');
-    
-    await convertMP4ToHLS(mergedMp4Path, finalPlaylistPath, outputDir);
+/*
+🔧 新增配置开关说明
 
-    // 🧹 清理无用的原始TS文件（保留final_playlist.m3u8中的标准HLS分片）
-    console.log('🧹 清理无用的原始TS文件...');
-    await cleanupUnusedTSFilesFromFinalPlaylist(finalPlaylistPath, outputDir);
-    console.log('✅ 原始TS文件清理完成');
-    
-    // 第四步：重命名最终播放列表
-    console.log('🔄 第四步：重命名最终播放列表...');
-    await rm(outputPlaylistPath, { force: true }); // 删除旧的playlist.m3u8
-    await cp(finalPlaylistPath, outputPlaylistPath); // 复制final_playlist.m3u8为playlist.m3u8
-    await rm(finalPlaylistPath, { force: true }); // 删除final_playlist.m3u8
-    
-    // 清理临时文件
-    await rm(mergedMp4Path, { force: true });
-    await rm(concatListPath, { force: true });
-    
-    console.log('🎉 PTS连续性修复完成！播放连续性已优化');
-    
-  } catch (error) {
-    console.warn('⚠️ PTS连续性修复失败，回退到原始流程:', error.message);
-  }
+useOriginalTimeline: 控制视频处理顺序的开关
+- true (默认): 使用原始时间线，先缩放后裁剪
+  - zoom参数基于原始视频时间轴
+  - 处理顺序: 原始视频 → 缩放 → 裁剪 → 输出
+  - 适用场景: 前端基于原始时间轴传递zoom参数
+  
+- false: 使用新时间线，先裁剪后缩放
+  - zoom参数基于裁剪后的新时间轴
+  - 处理顺序: 原始视频 → 裁剪 → 缩放 → 输出
+  - 适用场景: 需要在新时间轴上精确控制zoom效果
+
+使用示例:
+{
+  "recordingId": "xxx",
+  "manifestFileUrl": "xxx",
+  "callbackUrl": "xxx",
+  "outputS3Prefix": "xxx",
+  "cloudFrontVideoCookie": {...},
+  "trims": [...],
+  "zooms": [...],
+  "useOriginalTimeline": true  // 可选，默认为true
 }
+*/
