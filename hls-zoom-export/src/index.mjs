@@ -1094,7 +1094,18 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
       const zoomOutStart = zoomDuration - zoomOutTime;
       const relZoomStart = start - segs[0].startTime;
       const relZoomEnd = end - segs[0].startTime;
-      const zoomFormula = `if(lt(it,${zoomInTime}), 1+it/${zoomInTime}, if(lt(it,${zoomOutStart}), ${maxZoom}, if(lt(it,${zoomDuration}), ${maxZoom}-(it-${zoomOutStart})/${zoomOutTime}, 1)))`;
+      // const zoomFormula = `if(lt(it,${zoomInTime}), 1+it/${zoomInTime}, if(lt(it,${zoomOutStart}), ${maxZoom}, if(lt(it,${zoomDuration}), ${maxZoom}-(it-${zoomOutStart})/${zoomOutTime}, 1)))`;
+      const zoomFormula = `if(lt(it,${zoomInTime}),
+        1 + (${maxZoom}-1)*it/${zoomInTime},
+        if(lt(it,${zoomOutStart}),
+          ${maxZoom},
+          if(lt(it,${zoomDuration}),
+            ${maxZoom} - (${maxZoom}-1)*(it-${zoomOutStart})/${zoomOutTime},
+            1
+          )
+        )
+      )`;
+
       const filterComplex = [
         `[0:v]fps=${fps},scale=${preScaleWidth}:-1,split=3[pre][zoom][post];`,
         `[zoom]trim=start=${relZoomStart}:end=${relZoomEnd},setpts=PTS-STARTPTS,`,
