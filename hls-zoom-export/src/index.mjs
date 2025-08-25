@@ -99,7 +99,7 @@ export const handler = async (event) => {
         console.log("🎬 开始 Zoom 处理（原始时间轴）...");
         
         // 为缩放步骤创建独立的临时目录
-        const zoomOutputDir = spec.trims && spec.trims.length > 0 
+        const zoomOutputDir = hasTrimmed 
           ? `/tmp/${spec.recordingId}_zoomed` 
           : finalOutputDir; // 如果只有缩放，直接输出到最终目录
         
@@ -107,10 +107,50 @@ export const handler = async (event) => {
           await mkdir(zoomOutputDir, { recursive: true });
         }
         
+        // 🔍 分片分割预处理：检测重叠并执行分割
+        let finalZoomInputDir = currentInputDir;
+        let finalZoomPlaylistPath = currentPlaylistPath;
+        
+        if (spec.zooms && spec.zooms.length > 0) {
+          console.log("🔍 开始分片分割预处理...");
+          
+          // 1. 检测重叠和计算分割点
+          const segmentInfo = await parseM3U8Segments(currentPlaylistPath);
+          const splitPoints = detectOverlappingAndCalculateSplitPoints(spec.zooms, segmentInfo);
+          
+          // 2. 如果有分割点，执行分片分割
+          if (splitPoints.length > 0) {
+            console.log("⚠️ 检测到需要分割的分片，开始执行分片分割...");
+            
+            // 创建分割输出目录
+            const splitOutputDir = `/tmp/${spec.recordingId}_split`;
+            await mkdir(splitOutputDir, { recursive: true });
+            
+            // 执行分片分割
+            const splitResult = await splitSegmentsForZoom({
+              inputDir: currentInputDir,
+              outputDir: splitOutputDir,
+              playlistPath: currentPlaylistPath,
+              recordingId: spec.recordingId,
+              splitPoints: splitPoints,
+              lowQuality: spec.lowQuality === 'true' ? true : false,
+              spec: spec,
+            });
+            
+            // 更新输入路径
+            finalZoomInputDir = splitResult.inputDir;
+            finalZoomPlaylistPath = splitResult.playlistPath;
+            
+            console.log("✅ 分片分割完成，使用分割后的播放列表");
+          } else {
+            console.log("✅ 无需分割，使用原始播放列表");
+          }
+        }
+        
         await processZoom({
-          inputDir: currentInputDir,
+          inputDir: finalZoomInputDir,
           outputDir: zoomOutputDir,
-          playlistPath: currentPlaylistPath,
+          playlistPath: finalZoomPlaylistPath,
           recordingId: spec.recordingId,
           zooms: spec.zooms,
           lowQuality: spec.lowQuality === 'true' ? true : false,
@@ -223,10 +263,50 @@ export const handler = async (event) => {
           await mkdir(zoomOutputDir, { recursive: true });
         }
         
+        // 🔍 分片分割预处理：检测重叠并执行分割
+        let finalZoomInputDir = currentInputDir;
+        let finalZoomPlaylistPath = currentPlaylistPath;
+        
+        if (spec.zooms && spec.zooms.length > 0) {
+          console.log("🔍 开始分片分割预处理...");
+          
+          // 1. 检测重叠和计算分割点
+          const segmentInfo = await parseM3U8Segments(currentPlaylistPath);
+          const splitPoints = detectOverlappingAndCalculateSplitPoints(spec.zooms, segmentInfo);
+          
+          // 2. 如果有分割点，执行分片分割
+          if (splitPoints.length > 0) {
+            console.log("⚠️ 检测到需要分割的分片，开始执行分片分割...");
+            
+            // 创建分割输出目录
+            const splitOutputDir = `/tmp/${spec.recordingId}_split`;
+            await mkdir(splitOutputDir, { recursive: true });
+            
+            // 执行分片分割
+            const splitResult = await splitSegmentsForZoom({
+              inputDir: currentInputDir,
+              outputDir: splitOutputDir,
+              playlistPath: currentPlaylistPath,
+              recordingId: spec.recordingId,
+              splitPoints: splitPoints,
+              lowQuality: spec.lowQuality === 'true' ? true : false,
+              spec: spec,
+            });
+            
+            // 更新输入路径
+            finalZoomInputDir = splitResult.inputDir;
+            finalZoomPlaylistPath = splitResult.playlistPath;
+            
+            console.log("✅ 分片分割完成，使用分割后的播放列表");
+          } else {
+            console.log("✅ 无需分割，使用原始播放列表");
+          }
+        }
+        
         await processZoom({
-          inputDir: currentInputDir,
+          inputDir: finalZoomInputDir,
           outputDir: zoomOutputDir,
-          playlistPath: currentPlaylistPath,
+          playlistPath: finalZoomPlaylistPath,
           recordingId: spec.recordingId,
           zooms: spec.zooms,
           lowQuality: spec.lowQuality === 'true' ? true : false,
@@ -961,6 +1041,8 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
       };
     });
 
+    zoomSegments.sort((a, b) => a.segStart - b.segStart);
+
     // 3. 处理每个zoom区间，生成zoom-i.ts
     for (const zoomSeg of zoomSegments) {
       const { segs, idx, start, end, x, y, zoom: maxZoom, zoomDuration: zoomAnimationDuration = 2.0 } = zoomSeg;
@@ -1407,29 +1489,359 @@ async function uploadAllToS3(outputDir, spec) {
 const ok = (body) => ({ statusCode: 200, body: JSON.stringify(body) });
 const error = (c, m) => ({ statusCode: c, body: m });
 
-/*
-🔧 新增配置开关说明
-
-useOriginalTimeline: 控制视频处理顺序的开关
-- true (默认): 使用原始时间线，先缩放后裁剪
-  - zoom参数基于原始视频时间轴
-  - 处理顺序: 原始视频 → 缩放 → 裁剪 → 输出
-  - 适用场景: 前端基于原始时间轴传递zoom参数
+// 🔍 检测重叠和计算分割点函数
+function detectOverlappingAndCalculateSplitPoints(zooms, segmentInfo) {
+  console.log("🔍 开始检测缩放区间重叠和计算分割点...");
+  console.log("📊 缩放区间:", zooms);
+  console.log("📊 分片信息:", segmentInfo);
   
-- false: 使用新时间线，先裁剪后缩放
-  - zoom参数基于裁剪后的新时间轴
-  - 处理顺序: 原始视频 → 裁剪 → 缩放 → 输出
-  - 适用场景: 需要在新时间轴上精确控制zoom效果
-
-使用示例:
-{
-  "recordingId": "xxx",
-  "manifestFileUrl": "xxx",
-  "callbackUrl": "xxx",
-  "outputS3Prefix": "xxx",
-  "cloudFrontVideoCookie": {...},
-  "trims": [...],
-  "zooms": [...],
-  "useOriginalTimeline": true  // 可选，默认为true
+  const splitPoints = [];
+  
+  // 遍历所有分片，检测是否有多个缩放区间命中同一分片
+  for (let segIndex = 0; segIndex < segmentInfo.length; segIndex++) {
+    const segment = segmentInfo[segIndex];
+    const segmentStart = segment.startTime;
+    const segmentEnd = segment.endTime;
+    
+    // 🔧 添加数据类型检查日志
+    console.log(`🔍 分片 ${segIndex} 数据类型检查:`);
+    console.log(`   - segment.startTime: ${segmentStart} (类型: ${typeof segmentStart})`);
+    console.log(`   - segment.endTime: ${segmentEnd} (类型: ${typeof segmentEnd})`);
+    console.log(`   - segment:`, segment);
+    
+    // 找到命中当前分片的所有缩放区间
+    const overlappingZooms = zooms.filter(zoom => {
+      const hasOverlap = zoom.end > segmentStart && zoom.start < segmentEnd;
+      console.log(`   - zoom [${zoom.start}-${zoom.end}]: ${hasOverlap ? '命中' : '未命中'}`);
+      return hasOverlap;
+    });
+    
+    console.log(`🔍 分片 ${segIndex} [${segmentStart}s-${segmentEnd}s]: 命中 ${overlappingZooms.length} 个缩放区间`);
+    
+    // 如果只有一个缩放区间命中，不需要分割
+    if (overlappingZooms.length <= 1) {
+      continue;
+    }
+    
+    // 如果有多个缩放区间命中同一分片，需要计算分割点
+    console.log(`⚠️ 检测到分片 ${segIndex} 被多个缩放区间命中，需要分割`);
+    
+    // 收集所有缩放区间的边界点
+    const boundaryPoints = [];
+    overlappingZooms.forEach((zoom, zoomIndex) => {
+      console.log(`   🔍 分析缩放区间 ${zoomIndex}: [${zoom.start}s-${zoom.end}s]`);
+      
+      // 只考虑在分片范围内的边界点
+      if (zoom.start > segmentStart && zoom.start < segmentEnd) {
+        console.log(`     ✅ 添加zoom.start: ${zoom.start}s (在分片范围内)`);
+        boundaryPoints.push(zoom.start);
+      } else {
+        console.log(`     ❌ 跳过zoom.start: ${zoom.start}s (不在分片范围内)`);
+      }
+      
+      if (zoom.end > segmentStart && zoom.end < segmentEnd) {
+        console.log(`     ✅ 添加zoom.end: ${zoom.end}s (在分片范围内)`);
+        boundaryPoints.push(zoom.end);
+      } else {
+        console.log(`     ❌ 跳过zoom.end: ${zoom.end}s (不在分片范围内)`);
+      }
+    });
+    
+    // 去重并排序
+    const uniqueBoundaryPoints = [...new Set(boundaryPoints)].sort((a, b) => a - b);
+    console.log(`📍 分片 ${segIndex} 的边界点: [${uniqueBoundaryPoints.join(', ')}]`);
+    console.log(`📍 边界点数据类型检查:`, uniqueBoundaryPoints.map(p => ({ value: p, type: typeof p })));
+    
+    // 计算分割点（选择相邻边界点的中间点）
+    for (let i = 0; i < uniqueBoundaryPoints.length - 1; i++) {
+      const currentPoint = uniqueBoundaryPoints[i];
+      const nextPoint = uniqueBoundaryPoints[i + 1];
+      
+      // 🔧 添加分割点计算日志
+      console.log(`   🔧 计算分割点 ${i + 1}:`);
+      console.log(`     - currentPoint: ${currentPoint} (类型: ${typeof currentPoint})`);
+      console.log(`     - nextPoint: ${nextPoint} (类型: ${typeof nextPoint})`);
+      console.log(`     - 计算: (${currentPoint} + ${nextPoint}) / 2`);
+      
+      const splitPoint = (currentPoint + nextPoint) / 2;
+      
+      console.log(`     - 结果: ${splitPoint} (类型: ${typeof splitPoint})`);
+      console.log(`     - 是否为NaN: ${isNaN(splitPoint)}`);
+      
+      // 确保分割点在分片范围内
+      if (splitPoint > segmentStart && splitPoint < segmentEnd) {
+        const splitPointInfo = {
+          segmentIndex: segIndex,
+          time: splitPoint,
+          reason: `分割分片 ${segIndex}，在 ${currentPoint}s 和 ${nextPoint}s 之间选择中间点 ${splitPoint.toFixed(2)}s`
+        };
+        
+        console.log(`     ✅ 添加分割点:`, splitPointInfo);
+        splitPoints.push(splitPointInfo);
+      } else {
+        console.log(`     ❌ 分割点 ${splitPoint}s 不在分片范围内 [${segmentStart}s-${segmentEnd}s]`);
+      }
+    }
+  }
+  
+  // 🔧 添加最终结果检查日志
+  console.log("🎯 分割点计算完成");
+  console.log("📊 最终分割点列表:", splitPoints);
+  console.log("📊 分割点数据类型检查:", splitPoints.map(p => ({ 
+    segmentIndex: p.segmentIndex, 
+    time: p.time, 
+    timeType: typeof p.time,
+    isNaN: isNaN(p.time)
+  })));
+  
+  return splitPoints;
 }
-*/
+
+// ✂️ 分割函数：将分割点转换为裁剪片段并执行分割
+async function splitSegmentsForZoom({ inputDir, outputDir, playlistPath, recordingId, splitPoints, lowQuality, spec }) {
+  console.log("✂️ 开始执行分片分割...");
+  console.log("📊 输入分割点:", splitPoints);
+  
+  if (!splitPoints || splitPoints.length === 0) {
+    console.log("✅ 无需分割，直接返回原始路径");
+    return { inputDir, playlistPath };
+  }
+  
+  // 🔧 调用新的分片分割函数，不调用trim函数
+  console.log("🔄 调用新的分片分割函数...");
+  
+  const result = await splitOverlappingSegments({
+    inputDir: inputDir,
+    outputDir: outputDir,
+    playlistPath: playlistPath,
+    recordingId: recordingId,
+    splitPoints: splitPoints,
+    lowQuality: lowQuality,
+    spec: spec,
+  });
+  
+  console.log("✅ 分片分割完成");
+  
+  return result;
+}
+
+// ✂️ 新的分片分割函数：直接分割重叠分片，不调用trim函数
+async function splitOverlappingSegments({
+  inputDir, 
+  outputDir, 
+  playlistPath, 
+  recordingId, 
+  splitPoints, 
+  lowQuality,
+  spec
+}) {
+  console.log("✂️ 开始执行分片分割...");
+  console.log("📊 输入分割点:", splitPoints);
+  
+  if (!splitPoints || splitPoints.length === 0) {
+    console.log("✅ 无需分割，直接返回原始路径");
+    return { inputDir, playlistPath };
+  }
+  
+  // 1. 解析播放列表获取分片信息
+  const segmentInfo = await parseM3U8Segments(playlistPath);
+  
+  // 2. 复制不需要分割的分片
+  console.log(" 复制不需要分割的分片...");
+  for (const segment of segmentInfo) {
+    const inputFile = join(inputDir, segment.filename);
+    const outputFile = join(outputDir, segment.filename);
+    
+    // 检查这个分片是否需要分割
+    const needsSplit = splitPoints.some(point => 
+      point.segmentIndex === segment.index
+    );
+    
+    if (!needsSplit) {
+      // 不需要分割，直接复制
+      await cp(inputFile, outputFile);
+      console.log(`✅ 复制分片: ${segment.filename}`);
+    }
+  }
+  
+  // 3. 分割需要处理的分片
+  console.log("✂️ 开始分割重叠的分片...");
+  const newSegments = [];
+  let newSegmentIndex = 0;
+  
+  for (const segment of segmentInfo) {
+    const needsSplit = splitPoints.some(point => 
+      point.segmentIndex === segment.index
+    );
+    
+    if (!needsSplit) {
+      // 不需要分割的分片，保持原样
+      newSegments.push({
+        ...segment,
+        newIndex: newSegmentIndex++,
+        newFilename: segment.filename
+      });
+      continue;
+    }
+    
+    // 需要分割的分片
+    console.log(`⚠️ 分割分片 ${segment.index}: ${segment.filename}`);
+    
+    // 获取当前分片的分割点，按时间排序
+    const segmentSplitPoints = splitPoints
+      .filter(point => point.segmentIndex === segment.index)
+      .map(point => point.time)  // 🔧 关键修复：只提取 time 值，不要整个对象
+      .sort((a, b) => a - b);
+    
+    // 添加分片开始时间作为第一个分割点
+    const allSplitPoints = [segment.startTime, ...segmentSplitPoints, segment.endTime];
+    
+    // 🔧 添加详细的调试日志
+    console.log(`🔍 分片 ${segment.index} 的分割点构建:`);
+    console.log(`   - segment.startTime: ${segment.startTime} (类型: ${typeof segment.startTime})`);
+    console.log(`   - segment.endTime: ${segment.endTime} (类型: ${typeof segment.endTime})`);
+    console.log(`   - segmentSplitPoints:`, segmentSplitPoints);
+    console.log(`   - segmentSplitPoints 类型: ${typeof segmentSplitPoints}`);
+    console.log(`   - segmentSplitPoints 长度: ${segmentSplitPoints.length}`);
+    console.log(`   - segmentSplitPoints 每个元素类型:`, segmentSplitPoints.map((item, idx) => ({ 
+      index: idx, 
+      value: item, 
+      type: typeof item,
+      isObject: typeof item === 'object' && item !== null
+    })));
+    console.log(`   - 展开后的 segmentSplitPoints:`, ...segmentSplitPoints);
+    console.log(`   - allSplitPoints 最终结果:`, allSplitPoints);
+    console.log(`   - allSplitPoints 每个元素详情:`, allSplitPoints.map((item, idx) => ({ 
+      index: idx, 
+      value: item, 
+      type: typeof item,
+      isNaN: typeof item === 'number' ? isNaN(item) : 'N/A'
+    })));
+    
+    // 分割成多个子分片
+    for (let i = 0; i < allSplitPoints.length - 1; i++) {
+      const startTime = allSplitPoints[i];
+      const endTime = allSplitPoints[i + 1];
+      const duration = endTime - startTime;
+      
+      // 🔧 添加详细的调试日志
+      console.log(`   🔧 子分片 ${i + 1} 计算:`);
+      console.log(`     - startTime: ${startTime} (类型: ${typeof startTime})`);
+      console.log(`     - endTime: ${endTime} (类型: ${typeof endTime})`);
+      console.log(`     - duration = ${endTime} - ${startTime} = ${duration}`);
+      console.log(`     - duration类型: ${typeof duration}`);
+      console.log(`     - duration是否为NaN: ${isNaN(duration)}`);
+      console.log(`     - duration是否有效: ${duration > 0}`);
+      
+      // 跳过0时长的分片
+      if (duration <= 0) {
+        console.log(`     ❌ 跳过无效时长分片: duration = ${duration}`);
+        continue;
+      }
+      
+      // 计算相对于分片开始的时间
+      const relativeStartTime = startTime - segment.startTime;
+      console.log(`     - 相对开始时间: ${startTime} - ${segment.startTime} = ${relativeStartTime}`);
+      console.log(`     - 相对开始时间类型: ${typeof relativeStartTime}`);
+      console.log(`     - 相对开始时间是否为NaN: ${isNaN(relativeStartTime)}`);
+      
+      // 生成新的文件名
+      const newFilename = `${segment.filename.replace('.ts', '')}_part${i + 1}.ts`;
+      const outputFile = join(outputDir, newFilename);
+      
+      console.log(`     - 输出文件: ${outputFile}`);
+      console.log(`     - 准备调用splitSingleSegment...`);
+      
+      // 执行分割（重新编码，确保关键帧对齐）
+      await splitSingleSegment(
+        join(inputDir, segment.filename),  // 输入文件
+        outputFile,                         // 输出文件
+        relativeStartTime,                  // 相对开始时间
+        duration,                           // 持续时间
+        lowQuality                          // 质量参数
+      );
+      
+      // 添加到新分片列表
+      newSegments.push({
+        index: segment.index,
+        startTime: startTime,
+        endTime: endTime,
+        duration: duration,
+        filename: newFilename,
+        newIndex: newSegmentIndex++,
+        newFilename: newFilename
+      });
+      
+      console.log(`✅ 生成子分片: ${newFilename} (${startTime}s - ${endTime}s)`);
+    }
+  }
+  
+  // 4. 构建新的播放列表
+  console.log("📝 构建新的播放列表...");
+  const newPlaylistLines = [
+    '#EXTM3U',
+    '#EXT-X-VERSION:6',
+    `#EXT-X-TARGETDURATION:${Math.ceil(Math.max(...newSegments.map(s => s.duration)))}`,
+    '#EXT-X-MEDIA-SEQUENCE:0',
+    '#EXT-X-INDEPENDENT-SEGMENTS'
+  ];
+  
+  // 按时间顺序添加分片
+  newSegments.sort((a, b) => a.startTime - b.startTime);
+  
+  for (const segment of newSegments) {
+    newPlaylistLines.push(`#EXTINF:${segment.duration.toFixed(6)},`);
+    newPlaylistLines.push(segment.filename);
+  }
+  
+  newPlaylistLines.push('#EXT-X-ENDLIST');
+  
+  // 5. 写入新的播放列表
+  const newPlaylistPath = join(outputDir, 'playlist.m3u8');
+  await writeFile(newPlaylistPath, newPlaylistLines.join('\n'), 'utf8');
+  
+  console.log("✅ 分片分割完成");
+  console.log(` 分割结果: 原始 ${segmentInfo.length} 个分片 -> 新 ${newSegments.length} 个分片`);
+  
+  return {
+    inputDir: outputDir,
+    playlistPath: newPlaylistPath,
+    segmentMapping: {
+      original: segmentInfo,
+      split: newSegments
+    }
+  };
+}
+
+// 🎬 分割单个分片文件的辅助函数
+async function splitSingleSegment(inputFile, outputFile, startTime, duration, lowQuality) {
+  return new Promise((resolve, reject) => {
+    console.log(`✂️ 分割分片: ${inputFile} -> ${outputFile}`);
+    console.log(`⏰ 分割参数: start=${startTime}s, duration=${duration}s`);
+    
+    ffmpeg()
+      .input(inputFile)
+      .outputOptions([
+        '-ss', startTime.toString(),                    // 开始时间
+        '-t', duration.toString(),                      // 持续时间
+        '-c:v', 'libx264',                             // 视频编码器
+        '-preset', 'ultrafast',                         // 编码预设（快速）
+        '-crf', lowQuality ? '23' : '18',              // 质量参数
+        '-c:a', 'aac',                                 // 音频编码器
+        '-movflags', '+faststart',                      // 快速启动
+        '-avoid_negative_ts', 'make_zero',              // 避免负时间戳
+        '-y'                                            // 覆盖输出文件
+      ])
+      .output(outputFile)
+      .on('start', (cmd) => console.log(`[ffmpeg split] ${cmd}`))
+      .on('end', () => {
+        console.log(`✅ 分片分割完成: ${outputFile}`);
+        resolve();
+      })
+      .on('error', (err) => {
+        console.error(`❌ 分片分割失败: ${err.message}`);
+        reject(err);
+      })
+      .run();
+  });
+}
