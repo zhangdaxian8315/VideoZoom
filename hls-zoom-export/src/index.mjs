@@ -1027,6 +1027,8 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
     // 1. 解析M3U8播放列表，提取分片信息
     const segmentInfo = await parseM3U8Segments(playlistPath);
 
+    zooms.sort((a, b) => (a.start === b.start ? a.end - b.end : a.start - b.start));
+
     // 2. 计算所有zoom区间对应的分片索引范围
     const zoomSegments = zooms.map((zoom, idx) => {
       // 找到与zoom区间重叠的分片
@@ -1040,8 +1042,6 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
         idx
       };
     });
-
-    zoomSegments.sort((a, b) => a.segStart - b.segStart);
 
     // 3. 处理每个zoom区间，生成zoom-i.ts
     for (const zoomSeg of zoomSegments) {
@@ -1105,7 +1105,6 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
           )
         )
       )`;
-
       const filterComplex = [
         `[0:v]fps=${fps},scale=${preScaleWidth}:-1,split=3[pre][zoom][post];`,
         `[zoom]trim=start=${relZoomStart}:end=${relZoomEnd},setpts=PTS-STARTPTS,`,
