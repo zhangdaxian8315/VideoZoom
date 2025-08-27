@@ -85,6 +85,7 @@ export const handler = async (event) => {
     // 2. 执行处理逻辑（支持：只裁剪、只缩放、根据配置选择处理顺序）
     let hasTrimmed = false;
     let hasZoomed = false;
+    let hasBackgrounded = false;
     let currentInputDir = segDir;
     let currentPlaylistPath = playlistPath;
     let finalOutputDir = outputDir; // 最终输出目录
@@ -187,30 +188,111 @@ export const handler = async (event) => {
           spec,
         });
         console.log("✅ Trim 处理完成");
+
+        hasTrimmed = true;
+        
+        // 更新裁剪后的路径，为后续步骤做准备
+        currentInputDir = trimOutputDir;
+        currentPlaylistPath = join(trimOutputDir, 'playlist.m3u8');
         
         // 如果是先缩放再裁剪，需要将最终结果复制到最终目录
         if (hasZoomed) {
-          console.log("🔄 将最终结果复制到最终目录...");
-          await copyFinalResultToOutputDir(trimOutputDir, finalOutputDir);
-          console.log("✅ 最终结果复制完成");
-          
-          // 清理临时目录
-          console.log("🧹 清理临时目录...");
-          try {
-            await rm(zoomOutputDir, { recursive: true, force: true });
-            console.log(`✅ 清理临时目录: ${zoomOutputDir}`);
-          } catch (e) {
-            console.warn(`⚠️ 清理临时目录失败: ${e.message}`);
-          }
-          try {
-            await rm(trimOutputDir, { recursive: true, force: true });
-            console.log(`✅ 清理临时目录: ${trimOutputDir}`);
-          } catch (e) {
-            console.warn(`⚠️ 清理临时目录失败: ${e.message}`);
-          }
+          // 注意：文件复制和目录清理已移到所有步骤完成后
+          console.log("✅ 缩放和裁剪处理完成，等待背景处理...");
         }
-      } else if (!hasZoomed) {
-        // 如果既没有zooms也没有trims，直接拷贝原始文件
+      }
+
+      // 🎨 第三步：背景处理（基于缩放或裁剪后的结果）
+      if (spec.backgroundImage || spec.backgroundAudio || spec.aiNarrationAudio) {
+        console.log("🎨 开始背景处理...");
+        
+        // 为背景处理创建独立的临时目录
+        const backgroundOutputDir = (hasZoomed || hasTrimmed) 
+          ? `/tmp/${spec.recordingId}_background` 
+          : finalOutputDir; // 如果前面都没有处理，直接输出到最终目录
+        
+        if (backgroundOutputDir !== finalOutputDir) {
+          await mkdir(backgroundOutputDir, { recursive: true });
+        }
+        
+        await processBackground({
+          inputDir: currentInputDir,  // 使用前面步骤的输出
+          outputDir: backgroundOutputDir, // 输出到背景处理目录
+          playlistPath: currentPlaylistPath,
+          recordingId: spec.recordingId,
+          backgroundConfig: {
+            backgroundImage: spec.backgroundImage,
+            backgroundAudio: spec.backgroundAudio,
+            aiNarrationAudio: spec.aiNarrationAudio
+          },
+          lowQuality: spec.lowQuality === 'true' ? true : false,
+          spec
+        });
+        console.log("✅ 背景处理完成");
+        
+        // 更新当前输入目录和播放列表路径
+        hasBackgrounded = true;
+        currentInputDir = backgroundOutputDir;
+        currentPlaylistPath = join(backgroundOutputDir, 'playlist.m3u8');
+      }
+      
+      // 🎯 第四步：文件操作（复制/清理 或 直接拷贝原始文件）
+      if (hasZoomed || hasTrimmed || hasBackgrounded) {
+        console.log("🔄 所有处理步骤完成，开始复制最终结果...");
+        
+        // 确定源目录：按优先级选择最后一步的输出目录
+        let sourceDir;
+        if (hasBackgrounded) {
+          sourceDir = currentInputDir; // 背景处理输出目录
+          console.log(`📁 从背景处理输出目录复制: ${sourceDir}`);
+        } else if (hasTrimmed && typeof trimOutputDir !== 'undefined') {
+          sourceDir = trimOutputDir; // 裁剪输出目录
+          console.log(`📁 从裁剪输出目录复制: ${sourceDir}`);
+        } else if (hasZoomed && typeof zoomOutputDir !== 'undefined') {
+          sourceDir = zoomOutputDir; // 缩放输出目录
+          console.log(`📁 从缩放输出目录复制: ${sourceDir}`);
+        } else {
+          // 兜底方案：使用当前输入目录
+          sourceDir = currentInputDir;
+          console.log(`📁 使用兜底方案，从当前输入目录复制: ${sourceDir}`);
+        }
+        
+        // 复制最终结果到输出目录
+        await copyFinalResultToOutputDir(sourceDir, finalOutputDir);
+        console.log("✅ 最终结果复制完成");
+        
+        // 清理所有临时目录
+        console.log("🧹 开始清理临时目录...");
+        try {
+          if (hasZoomed && typeof zoomOutputDir !== 'undefined') {
+            await rm(zoomOutputDir, { recursive: true, force: true });
+            console.log(`✅ 清理缩放临时目录: ${zoomOutputDir}`);
+          }
+        } catch (e) {
+          console.warn(`⚠️ 清理缩放临时目录失败: ${e.message}`);
+        }
+        
+        try {
+          if (hasTrimmed && typeof trimOutputDir !== 'undefined') {
+            await rm(trimOutputDir, { recursive: true, force: true });
+            console.log(`✅ 清理裁剪临时目录: ${trimOutputDir}`);
+          }
+        } catch (e) {
+          console.warn(`⚠️ 清理裁剪临时目录失败: ${e.message}`);
+        }
+        
+        try {
+          if (hasBackgrounded && typeof backgroundOutputDir !== 'undefined') {
+            await rm(backgroundOutputDir, { recursive: true, force: true });
+            console.log(`✅ 清理背景处理临时目录: ${backgroundOutputDir}`);
+          }
+        } catch (e) {
+          console.warn(`⚠️ 清理背景处理临时目录失败: ${e.message}`);
+        }
+        
+        console.log("✅ 所有临时目录清理完成");
+      } else {
+        // 如果没有任何处理步骤，直接拷贝原始文件
         console.log("📋 没有处理参数，直接拷贝原始文件...");
         await copyOriginalFiles(segDir, finalOutputDir);
         console.log("✅ 文件拷贝完成");
@@ -462,6 +544,22 @@ function parsePayload(raw) {
     console.log("✅ Zoom 参数校验通过");
   }
   
+  // 🎨 背景相关参数校验（可选）
+  if (body.backgroundImage) {
+    validateBackgroundImageParameters(body.backgroundImage);
+    console.log("✅ 背景图片参数校验通过");
+  }
+  
+  if (body.backgroundAudio) {
+    validateBackgroundAudioParameters(body.backgroundAudio);
+    console.log("✅ 背景音频参数校验通过");
+  }
+  
+  if (body.aiNarrationAudio) {
+    validateAiNarrationAudioParameters(body.aiNarrationAudio);
+    console.log("✅ AI旁白音频参数校验通过");
+  }
+  
   // 将配置开关添加到返回的对象中
   return {
     ...body,
@@ -551,6 +649,39 @@ function validateZoomParameters(zooms) {
       }
     }
   });
+}
+
+// 🎨 背景图片参数校验函数
+function validateBackgroundImageParameters(backgroundImage) {
+  if (!backgroundImage.url || typeof backgroundImage.url !== 'string') {
+    throw badRequest('Background image must have a valid URL');
+  }
+  
+  if (backgroundImage.scaleVideo !== undefined) {
+    if (typeof backgroundImage.scaleVideo !== 'number' || backgroundImage.scaleVideo <= 0) {
+      throw badRequest('Background image scaleVideo must be a positive number');
+    }
+  }
+}
+
+// 🎵 背景音频参数校验函数
+function validateBackgroundAudioParameters(backgroundAudio) {
+  if (!backgroundAudio.url || typeof backgroundAudio.url !== 'string') {
+    throw badRequest('Background audio must have a valid URL');
+  }
+  
+  if (backgroundAudio.volume !== undefined) {
+    if (typeof backgroundAudio.volume !== 'number' || backgroundAudio.volume < 0 || backgroundAudio.volume > 1) {
+      throw badRequest('Background audio volume must be between 0 and 1');
+    }
+  }
+}
+
+// 🗣️ AI旁白音频参数校验函数
+function validateAiNarrationAudioParameters(aiNarrationAudio) {
+  if (!aiNarrationAudio.url || typeof aiNarrationAudio.url !== 'string') {
+    throw badRequest('AI narration audio must have a valid URL');
+  }
 }
 
 // ✅ 通用 S3 地址解析器：支持 s3:// 和 https:// 格式
