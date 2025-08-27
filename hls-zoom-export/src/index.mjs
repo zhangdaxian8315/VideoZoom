@@ -1986,3 +1986,225 @@ async function splitSingleSegment(inputFile, outputFile, startTime, duration, lo
       .run();
   });
 }
+
+// 🎨 背景处理函数：添加背景图片、背景音频和AI旁白
+async function processBackground({ inputDir, outputDir, playlistPath, recordingId, backgroundConfig, lowQuality, spec }) {
+  console.log("🎨 开始背景处理...");
+  console.log("📊 背景配置:", backgroundConfig);
+  
+  try {
+    // 1. 下载背景资源
+    const downloadedAssets = await downloadBackgroundAssets(backgroundConfig, outputDir);
+    console.log("✅ 背景资源下载完成");
+    
+    // 2. 构建FFmpeg滤镜图
+    const ffmpegPlan = buildBackgroundGraph(playlistPath, downloadedAssets, backgroundConfig, lowQuality);
+    console.log("✅ FFmpeg滤镜图构建完成");
+    
+    // 3. 执行FFmpeg处理
+    await runBackgroundFfmpeg(ffmpegPlan, outputDir, recordingId);
+    console.log("✅ 背景处理完成");
+    
+  } catch (error) {
+    console.error("❌ 背景处理失败:", error);
+    throw error;
+  }
+}
+
+// 📥 下载背景资源
+async function downloadBackgroundAssets(backgroundConfig, outputDir) {
+  const assets = {};
+  
+  if (backgroundConfig.backgroundImage?.url) {
+    console.log("📥 下载背景图片...");
+    const bgImagePath = join(outputDir, 'background.mp4');
+    await downloadBackgroundFile(backgroundConfig.backgroundImage.url, bgImagePath);
+    assets.bgImage = bgImagePath;
+    
+    // 检查文件大小
+    try {
+      const stats = await stat(bgImagePath);
+      console.log(`📊 背景图片文件大小: ${stats.size} bytes`);
+    } catch (e) {
+      console.warn(`⚠️ 无法获取背景图片文件大小: ${e.message}`);
+    }
+  }
+  
+  if (backgroundConfig.backgroundAudio?.url) {
+    console.log("📥 下载背景音乐...");
+    const bgAudioPath = join(outputDir, 'background.mp3');
+    await downloadBackgroundFile(backgroundConfig.backgroundAudio.url, bgAudioPath);
+    assets.bgAudio = bgAudioPath;
+    
+    // 检查文件大小
+    try {
+      const stats = await stat(bgAudioPath);
+      console.log(`📊 背景音乐文件大小: ${stats.size} bytes`);
+    } catch (e) {
+      console.warn(`⚠️ 无法获取背景音乐文件大小: ${e.message}`);
+    }
+  }
+  
+  if (backgroundConfig.aiNarrationAudio?.url) {
+    console.log("📥 下载AI旁白...");
+    const aiAudioPath = join(outputDir, 'ai_narration.mp3');
+    await downloadBackgroundFile(backgroundConfig.aiNarrationAudio.url, aiAudioPath);
+    assets.aiAudio = aiAudioPath;
+    
+    // 检查文件大小
+    try {
+      const stats = await stat(aiAudioPath);
+      console.log(`📊 AI旁白文件大小: ${stats.size} bytes`);
+    } catch (e) {
+      console.warn(`⚠️ 无法获取AI旁白文件大小: ${e.message}`);
+    }
+  }
+  
+  return assets;
+}
+
+// 📥 下载单个背景文件
+async function downloadBackgroundFile(url, destPath) {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`下载失败: ${response.status} ${response.statusText}`);
+    }
+    
+    const buffer = Buffer.from(await response.arrayBuffer());
+    await writeFile(destPath, buffer);
+    console.log(`✅ 下载完成: ${destPath}`);
+  } catch (error) {
+    console.error(`❌ 下载失败 ${url}:`, error.message);
+    throw error;
+  }
+}
+
+// 🎬 构建背景处理的FFmpeg滤镜图
+function buildBackgroundGraph(playlistPath, assets, backgroundConfig, lowQuality) {
+  const inputs = [playlistPath]; // 输入0：HLS播放列表
+  const filters = [];
+  const maps = [];
+  
+  console.log(`🎵 输入文件列表: [${inputs.join(', ')}]`);
+  
+  let videoStream = "0:v";
+  const audioStreams = [];
+  
+  // 1. 处理背景图片
+  if (assets.bgImage) {
+    inputs.push(assets.bgImage); // 输入1：背景图片
+    const scale = backgroundConfig.backgroundImage?.scaleVideo ?? 1.8;
+    
+    console.log(`🎬 背景图片处理: 输入索引=${inputs.length-1}, 缩放比例=${scale}`);
+    
+    filters.push(
+      `[1:v]loop=loop=-1:size=1:start=0[bg];` +           // 背景图片无限循环
+      `[${videoStream}]scale=iw/${scale}:ih/${scale}[inner];` + // 视频缩放
+      `[bg][inner]overlay=(W-w)/2:(H-h)/2:shortest=1[vout]`   // 视频叠加到背景中心
+    );
+    videoStream = "vout";
+  }
+  
+  // 2. 处理音频流
+  const wantOriginal = !assets.aiAudio; // 没有AI旁白时保留原音频
+  if (wantOriginal) {
+    audioStreams.push("0:a");
+    console.log("🎵 保留原视频音频流: 0:a");
+  }
+  
+  // 背景音乐
+  if (assets.bgAudio) {
+    inputs.push(assets.bgAudio); // ✅ 修复：添加背景音乐到inputs数组
+    const bgAudioIndex = inputs.length - 1; // 现在索引计算正确了
+    const volume = backgroundConfig.backgroundAudio?.volume ?? 0.5;
+    console.log(`🎵 背景音乐处理: 输入索引=${bgAudioIndex}, 音量=${volume}`);
+    console.log(`🎵 背景音乐文件路径: ${assets.bgAudio}`);
+    filters.push(`[${bgAudioIndex}:a]volume=${volume}[bgm]`);
+    audioStreams.push("bgm");
+  }
+  
+  // AI旁白
+  if (assets.aiAudio) {
+    inputs.push(assets.aiAudio); // ✅ 修复：添加AI旁白到inputs数组
+    const aiAudioIndex = inputs.length - 1; // 现在索引计算正确了
+    console.log(`🎵 AI旁白音频: 输入索引=${aiAudioIndex}`);
+    console.log(`🎵 AI旁白文件路径: ${assets.aiAudio}`);
+    audioStreams.push(`${aiAudioIndex}:a`);
+  }
+  
+  // 3. 音频混合
+  let finalAudio = "";
+  if (audioStreams.length === 1) {
+    finalAudio = audioStreams[0];
+    console.log(`🎵 单音频流，无需混合: ${finalAudio}`);
+  } else if (audioStreams.length > 1) {
+    const amixInputs = audioStreams.map(s => `[${s}]`).join("");
+    console.log(`🎵 多音频流混合: ${audioStreams.join(', ')} -> amix`);
+    filters.push(
+      `${amixInputs}amix=inputs=${audioStreams.length}:duration=first:dropout_transition=2[aout]`
+    );
+    finalAudio = "aout";
+  }
+  
+  console.log(`🎵 最终音频输出: ${finalAudio}`);
+  console.log(`🎵 音频滤镜链: ${filters.join(';')}`);
+  
+  // 4. 输出映射
+  maps.push(`-map ${videoStream.includes(":") ? videoStream : `[${videoStream}]`}`);
+  if (finalAudio) {
+    maps.push(`-map ${finalAudio.includes(":") ? finalAudio : `[${finalAudio}]`}`);
+  }
+  
+  console.log(`🎵 最终输出映射: ${maps.join(' ')}`);
+  console.log(`🎵 完整输入文件列表: [${inputs.join(', ')}]`);
+  
+  return { inputs, filters: filters.join(";"), maps };
+}
+
+// 🎬 执行背景处理的FFmpeg命令
+async function runBackgroundFfmpeg(plan, outputDir, recordingId) {
+  await mkdir(outputDir, { recursive: true });
+  
+  return new Promise((resolve, reject) => {
+    let cmd = ffmpeg();
+    
+    // 添加输入文件
+    plan.inputs.forEach(input => {
+      cmd = cmd.addInput(input);
+    });
+    
+    // 添加复杂滤镜
+    if (plan.filters) {
+      cmd = cmd.complexFilter(plan.filters);
+    }
+    
+    // 确定视频编码器
+    const videoCodec = plan.filters.includes("[vout]") 
+      ? ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "23"] // 需要重新编码
+      : ["-c:v", "copy"]; // 直接复制
+    
+    cmd
+      .outputOptions([
+        ...plan.maps,
+        ...videoCodec,
+        "-c:a", "aac",
+        "-f", "hls",
+        "-hls_time", "4",
+        `-hls_segment_filename`, `${outputDir}/${recordingId}-%04d.ts`,
+        "-hls_playlist_type", "event",
+        "-hide_banner",
+        "-loglevel", "error"
+      ])
+      .on("start", (command) => console.log(`[ffmpeg background] ${command}`))
+      .on("end", () => {
+        console.log("✅ 背景处理FFmpeg执行完成");
+        resolve();
+      })
+      .on("error", (err) => {
+        console.error("❌ 背景处理FFmpeg执行失败:", err.message);
+        reject(err);
+      })
+      .save(`${outputDir}/playlist.m3u8`);
+  });
+}
