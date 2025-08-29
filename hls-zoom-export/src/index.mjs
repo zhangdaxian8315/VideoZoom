@@ -1998,7 +1998,7 @@ async function processBackground({ inputDir, outputDir, playlistPath, recordingI
     console.log("✅ 背景资源下载完成");
     
     // 2. 构建FFmpeg滤镜图
-    const ffmpegPlan = buildBackgroundGraph(playlistPath, downloadedAssets, backgroundConfig, lowQuality);
+    const ffmpegPlan = await buildBackgroundGraph(playlistPath, downloadedAssets, backgroundConfig, lowQuality);
     console.log("✅ FFmpeg滤镜图构建完成");
     
     // 3. 执行FFmpeg处理
@@ -2081,58 +2081,85 @@ async function downloadBackgroundFile(url, destPath) {
 }
 
 // 🎬 构建背景处理的FFmpeg滤镜图
-function buildBackgroundGraph(playlistPath, assets, backgroundConfig, lowQuality) {
+async function buildBackgroundGraph(playlistPath, assets, backgroundConfig, lowQuality) {
   const inputs = [playlistPath]; // 输入0：HLS播放列表
   const filters = [];
   const maps = [];
-  
+  const perInputOptionsByIndex = {};   // ★ 新增：记录每个输入的「输入级选项」
+
   console.log(`🎵 输入文件列表: [${inputs.join(', ')}]`);
-  
+
   let videoStream = "0:v";
   const audioStreams = [];
-  
-  // 1. 处理背景图片
+
+  // 1. 处理背景图片/视频
   if (assets.bgImage) {
-    inputs.push(assets.bgImage); // 输入1：背景图片
     const scale = backgroundConfig.backgroundImage?.scaleVideo ?? 1.8;
-    
-    console.log(`🎬 背景图片处理: 输入索引=${inputs.length-1}, 缩放比例=${scale}`);
-    
-    filters.push(
-      `[1:v]loop=loop=-1:size=1:start=0[bg];` +           // 背景图片无限循环
-      `[${videoStream}]scale=iw/${scale}:ih/${scale}[inner];` + // 视频缩放
-      `[bg][inner]overlay=(W-w)/2:(H-h)/2:shortest=1[vout]`   // 视频叠加到背景中心
-    );
-    videoStream = "vout";
+
+    const bgIndex = inputs.length;     // 记录：这个将是第几个输入
+    inputs.push(assets.bgImage);       // 仍然只 push 路径/流
+
+    try {
+      const info = await getBackgroundFileInfo(assets.bgImage);
+      const isVideo = !!info?.isVideo;
+
+      if (isVideo) {
+        // 背景是视频：滤镜不 loop，按主视频时长（shortest=1）
+        filters.push(
+          `[${bgIndex}:v]setpts=PTS-STARTPTS,setsar=1[bg];` +
+          `[${videoStream}]scale=iw/${scale}:ih/${scale},setsar=1,setpts=PTS-STARTPTS[inner];` +
+          `[bg][inner]overlay=(W-w)/2:(H-h)/2:shortest=1[vout]`
+        );
+        videoStream = 'vout';
+
+        // ★ 关键：标记这个输入需要 -stream_loop -1（可选再加 -an 静音该输入）
+        perInputOptionsByIndex[bgIndex] = ['-stream_loop', '-1', /* '-an' */];
+
+      } else {
+        // 背景是图片：保留原逻辑（loop + overlay）
+        filters.push(
+          `[${bgIndex}:v]loop=loop=-1:size=1:start=0[bg];` +
+          `[${videoStream}]scale=iw/${scale}:ih/${scale}[inner];` +
+          `[bg][inner]overlay=(W-w)/2:(H-h)/2:shortest=1[vout]`
+        );
+        videoStream = 'vout';
+      }
+    } catch (e) {
+      console.warn('⚠️ 背景类型检测失败，按图片处理：', e?.message || e);
+      filters.push(
+        `[${bgIndex}:v]loop=loop=-1:size=1:start=0[bg];` +
+        `[${videoStream}]scale=iw/${scale}:ih/${scale}[inner];` +
+        `[bg][inner]overlay=(W-w)/2:(H-h)/2:shortest=1[vout]`
+      );
+      videoStream = 'vout';
+    }
   }
-  
-  // 2. 处理音频流
-  const wantOriginal = !assets.aiAudio; // 没有AI旁白时保留原音频
+
+  // 2. 处理音频流（保持你的原逻辑）
+  const wantOriginal = !assets.aiAudio;
   if (wantOriginal) {
     audioStreams.push("0:a");
     console.log("🎵 保留原视频音频流: 0:a");
   }
-  
-  // 背景音乐
+
   if (assets.bgAudio) {
-    inputs.push(assets.bgAudio); // ✅ 修复：添加背景音乐到inputs数组
-    const bgAudioIndex = inputs.length - 1; // 现在索引计算正确了
+    inputs.push(assets.bgAudio);
+    const bgAudioIndex = inputs.length - 1;
     const volume = backgroundConfig.backgroundAudio?.volume ?? 0.5;
     console.log(`🎵 背景音乐处理: 输入索引=${bgAudioIndex}, 音量=${volume}`);
     console.log(`🎵 背景音乐文件路径: ${assets.bgAudio}`);
     filters.push(`[${bgAudioIndex}:a]volume=${volume}[bgm]`);
     audioStreams.push("bgm");
   }
-  
-  // AI旁白
+
   if (assets.aiAudio) {
-    inputs.push(assets.aiAudio); // ✅ 修复：添加AI旁白到inputs数组
-    const aiAudioIndex = inputs.length - 1; // 现在索引计算正确了
+    inputs.push(assets.aiAudio);
+    const aiAudioIndex = inputs.length - 1;
     console.log(`🎵 AI旁白音频: 输入索引=${aiAudioIndex}`);
     console.log(`🎵 AI旁白文件路径: ${assets.aiAudio}`);
     audioStreams.push(`${aiAudioIndex}:a`);
   }
-  
+
   // 3. 音频混合
   let finalAudio = "";
   if (audioStreams.length === 1) {
@@ -2146,55 +2173,61 @@ function buildBackgroundGraph(playlistPath, assets, backgroundConfig, lowQuality
     );
     finalAudio = "aout";
   }
-  
+
   console.log(`🎵 最终音频输出: ${finalAudio}`);
   console.log(`🎵 音频滤镜链: ${filters.join(';')}`);
-  
+
   // 4. 输出映射
   maps.push(`-map ${videoStream.includes(":") ? videoStream : `[${videoStream}]`}`);
   if (finalAudio) {
     maps.push(`-map ${finalAudio.includes(":") ? finalAudio : `[${finalAudio}]`}`);
   }
-  
+
   console.log(`🎵 最终输出映射: ${maps.join(' ')}`);
   console.log(`🎵 完整输入文件列表: [${inputs.join(', ')}]`);
-  
-  return { inputs, filters: filters.join(";"), maps };
+
+  // ★ 新增：把 perInputOptionsByIndex 一起返回
+  return { inputs, filters: filters.join(";"), maps, perInputOptionsByIndex };
 }
 
 // 🎬 执行背景处理的FFmpeg命令
 async function runBackgroundFfmpeg(plan, outputDir, recordingId) {
   await mkdir(outputDir, { recursive: true });
-  
+
   return new Promise((resolve, reject) => {
     let cmd = ffmpeg();
-    
-    // 添加输入文件
-    plan.inputs.forEach(input => {
-      cmd = cmd.addInput(input);
+
+    // ★ 添加输入文件（逐个），若该索引有输入级选项，则立刻贴在它后面
+    plan.inputs.forEach((input, idx) => {
+      cmd = cmd.input(input);
+      const opts = plan.perInputOptionsByIndex?.[idx];
+      if (opts && opts.length) {
+        cmd = cmd.inputOptions(opts);   // ← 这行会把选项贴到“刚刚添加”的这个输入上
+      }
     });
-    
+
     // 添加复杂滤镜
     if (plan.filters) {
       cmd = cmd.complexFilter(plan.filters);
     }
-    
-    // 确定视频编码器
-    const videoCodec = plan.filters.includes("[vout]") 
-      ? ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "23"] // 需要重新编码
-      : ["-c:v", "copy"]; // 直接复制
-    
+
+    // 视频编码器
+    const videoCodec = plan.filters.includes("[vout]")
+      ? ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "23"]
+      : ["-c:v", "copy"];
+
     cmd
       .outputOptions([
         ...plan.maps,
         ...videoCodec,
         "-c:a", "aac",
+        "-shortest",                 // ★ 保险：防止音频把时长拖长
         "-f", "hls",
         "-hls_time", "4",
         `-hls_segment_filename`, `${outputDir}/${recordingId}-%04d.ts`,
         "-hls_playlist_type", "event",
         "-hide_banner",
-        "-loglevel", "error"
+        "-loglevel", "error",
       ])
       .on("start", (command) => console.log(`[ffmpeg background] ${command}`))
       .on("end", () => {
@@ -2206,5 +2239,36 @@ async function runBackgroundFfmpeg(plan, outputDir, recordingId) {
         reject(err);
       })
       .save(`${outputDir}/playlist.m3u8`);
+  });
+}
+
+// 🔍 检测背景文件类型（图片还是视频）
+function getBackgroundFileInfo(filePath) {
+  return new Promise((resolve, reject) => {
+    ffmpeg.ffprobe(filePath, (err, info) => {
+      if (err) {
+        reject(new Error(`FFprobe failed: ${err.message}`));
+        return;
+      }
+      
+      try {
+        const videoStream = info.streams?.find(s => s.codec_type === 'video');
+        const audioStream = info.streams?.find(s => s.codec_type === 'audio');
+        const duration = parseFloat(info.format?.duration || 0);
+        
+        resolve({
+          hasVideo: !!videoStream,
+          hasAudio: !!audioStream,
+          isVideo: !!videoStream && duration > 0.1,  // 有持续时间才是视频
+          isImage: !!videoStream && duration <= 0.1, // 没有持续时间是图片
+          duration: duration,
+          width: videoStream?.width || 0,
+          height: videoStream?.height || 0,
+          codecName: videoStream?.codec_name || ''
+        });
+      } catch (e) {
+        reject(new Error(`Failed to parse background file info: ${e.message}`));
+      }
+    });
   });
 }
