@@ -2082,60 +2082,95 @@ async function downloadBackgroundFile(url, destPath) {
 
 // 🎬 构建背景处理的FFmpeg滤镜图
 async function buildBackgroundGraph(playlistPath, assets, backgroundConfig, lowQuality) {
-  const inputs = [playlistPath]; // 输入0：HLS播放列表
+  const inputs = [playlistPath]; // 输入0：HLS播放列表（主视频）
   const filters = [];
   const maps = [];
-  const perInputOptionsByIndex = {};   // ★ 新增：记录每个输入的「输入级选项」
+  const perInputOptionsByIndex = {}; // 记录输入级选项（比如 -stream_loop -1）
 
   console.log(`🎵 输入文件列表: [${inputs.join(', ')}]`);
 
   let videoStream = "0:v";
   const audioStreams = [];
 
-  // 1. 处理背景图片/视频
-  if (assets.bgImage) {
-    const scale = backgroundConfig.backgroundImage?.scaleVideo ?? 1.8;
+  // ---- 读取并规整“边界百分比”参数（用原来的 scaleVideo 字段）----
+  let padding = backgroundConfig?.backgroundImage?.scaleVideo;
+  if (!(typeof padding === 'number') || padding <= 0 || padding >= 1) {
+    padding = 0.05; // 默认 10%
+  }
 
-    const bgIndex = inputs.length;     // 记录：这个将是第几个输入
-    inputs.push(assets.bgImage);       // 仍然只 push 路径/流
+  // ---- ffprobe 主视频尺寸 ----
+  const mainInfo = await getVideoInfo(playlistPath); // { width, height, ... }
+  const fw = mainInfo?.width  || 1920;
+  const fh = mainInfo?.height || 1080;
+
+  // 1) 处理背景图片/视频
+  if (assets.bgImage) {
+    const bgIndex = inputs.length;
+    inputs.push(assets.bgImage);
+
+    // 背景信息（判断是否视频 + 尺寸）
+    let isVideo = false;
+    let bgW = 1920, bgH = 1080;
 
     try {
       const info = await getBackgroundFileInfo(assets.bgImage);
-      const isVideo = !!info?.isVideo;
-
-      if (isVideo) {
-        // 背景是视频：滤镜不 loop，按主视频时长（shortest=1）
-        filters.push(
-          `[${bgIndex}:v]setpts=PTS-STARTPTS,setsar=1[bg];` +
-          `[${videoStream}]scale=iw/${scale}:ih/${scale},setsar=1,setpts=PTS-STARTPTS[inner];` +
-          `[bg][inner]overlay=(W-w)/2:(H-h)/2:shortest=1[vout]`
-        );
-        videoStream = 'vout';
-
-        // ★ 关键：标记这个输入需要 -stream_loop -1（可选再加 -an 静音该输入）
-        perInputOptionsByIndex[bgIndex] = ['-stream_loop', '-1', /* '-an' */];
-
-      } else {
-        // 背景是图片：保留原逻辑（loop + overlay）
-        filters.push(
-          `[${bgIndex}:v]loop=loop=-1:size=1:start=0[bg];` +
-          `[${videoStream}]scale=iw/${scale}:ih/${scale}[inner];` +
-          `[bg][inner]overlay=(W-w)/2:(H-h)/2:shortest=1[vout]`
-        );
-        videoStream = 'vout';
+      isVideo = !!info?.isVideo;
+      if (info?.width > 0 && info?.height > 0) {
+        bgW = info.width;
+        bgH = info.height;
       }
     } catch (e) {
-      console.warn('⚠️ 背景类型检测失败，按图片处理：', e?.message || e);
+      console.warn('⚠️ 背景类型/尺寸检测失败，使用缺省分辨率 1920x1080：', e?.message || e);
+    }
+
+    // ---- 比较宽高比来决定缩放逻辑 ----
+    const even = (n) => Math.max(2, Math.floor(n / 2) * 2); // H.264 要求偶数
+    let outW, outH, posX, posY;
+
+    const mainAR = fw / fh;   // 主视频宽高比
+    const bgAR   = bgW / bgH; // 背景宽高比
+
+    if (mainAR >= bgAR) {
+      // 主视频更宽（扁） → 按宽度贴边
+      const boxW = bgW * (1 - 2 * padding);
+      const scale = boxW / fw;
+      outW = even(boxW);
+      outH = even(fh * scale);
+      posX = Math.round(bgW * padding);
+      posY = Math.round((bgH - outH) / 2);
+    } else {
+      // 主视频更高（竖） → 按高度贴边
+      const boxH = bgH * (1 - 2 * padding);
+      const scale = boxH / fh;
+      outH = even(boxH);
+      outW = even(fw * scale);
+      posX = Math.round((bgW - outW) / 2);
+      posY = Math.round(bgH * padding);
+    }
+
+    // ---- 组装滤镜 ----
+    if (isVideo) {
       filters.push(
-        `[${bgIndex}:v]loop=loop=-1:size=1:start=0[bg];` +
-        `[${videoStream}]scale=iw/${scale}:ih/${scale}[inner];` +
-        `[bg][inner]overlay=(W-w)/2:(H-h)/2:shortest=1[vout]`
+        `[${bgIndex}:v]setpts=PTS-STARTPTS,setsar=1[bg];` +
+        `[${videoStream}]setpts=PTS-STARTPTS,setsar=1,scale=${outW}:${outH}[inner];` +
+        `[bg][inner]overlay=${posX}:${posY}:shortest=1[vout]`
+      );
+      videoStream = 'vout';
+
+      // 背景视频无限循环
+      perInputOptionsByIndex[bgIndex] = ['-stream_loop', '-1'];
+
+    } else {
+      filters.push(
+        `[${bgIndex}:v]loop=loop=-1:size=1:start=0,setsar=1[bg];` +
+        `[${videoStream}]setpts=PTS-STARTPTS,setsar=1,scale=${outW}:${outH}[inner];` +
+        `[bg][inner]overlay=${posX}:${posY}:shortest=1[vout]`
       );
       videoStream = 'vout';
     }
   }
 
-  // 2. 处理音频流（保持你的原逻辑）
+  // 2) 处理音频（保持你的原逻辑）
   const wantOriginal = !assets.aiAudio;
   if (wantOriginal) {
     audioStreams.push("0:a");
@@ -2146,8 +2181,6 @@ async function buildBackgroundGraph(playlistPath, assets, backgroundConfig, lowQ
     inputs.push(assets.bgAudio);
     const bgAudioIndex = inputs.length - 1;
     const volume = backgroundConfig.backgroundAudio?.volume ?? 0.5;
-    console.log(`🎵 背景音乐处理: 输入索引=${bgAudioIndex}, 音量=${volume}`);
-    console.log(`🎵 背景音乐文件路径: ${assets.bgAudio}`);
     filters.push(`[${bgAudioIndex}:a]volume=${volume}[bgm]`);
     audioStreams.push("bgm");
   }
@@ -2155,38 +2188,27 @@ async function buildBackgroundGraph(playlistPath, assets, backgroundConfig, lowQ
   if (assets.aiAudio) {
     inputs.push(assets.aiAudio);
     const aiAudioIndex = inputs.length - 1;
-    console.log(`🎵 AI旁白音频: 输入索引=${aiAudioIndex}`);
-    console.log(`🎵 AI旁白文件路径: ${assets.aiAudio}`);
     audioStreams.push(`${aiAudioIndex}:a`);
   }
 
-  // 3. 音频混合
+  // 3) 音频混合
   let finalAudio = "";
   if (audioStreams.length === 1) {
     finalAudio = audioStreams[0];
-    console.log(`🎵 单音频流，无需混合: ${finalAudio}`);
   } else if (audioStreams.length > 1) {
     const amixInputs = audioStreams.map(s => `[${s}]`).join("");
-    console.log(`🎵 多音频流混合: ${audioStreams.join(', ')} -> amix`);
     filters.push(
       `${amixInputs}amix=inputs=${audioStreams.length}:duration=first:dropout_transition=2[aout]`
     );
     finalAudio = "aout";
   }
 
-  console.log(`🎵 最终音频输出: ${finalAudio}`);
-  console.log(`🎵 音频滤镜链: ${filters.join(';')}`);
-
-  // 4. 输出映射
+  // 4) 输出映射
   maps.push(`-map ${videoStream.includes(":") ? videoStream : `[${videoStream}]`}`);
   if (finalAudio) {
     maps.push(`-map ${finalAudio.includes(":") ? finalAudio : `[${finalAudio}]`}`);
   }
 
-  console.log(`🎵 最终输出映射: ${maps.join(' ')}`);
-  console.log(`🎵 完整输入文件列表: [${inputs.join(', ')}]`);
-
-  // ★ 新增：把 perInputOptionsByIndex 一起返回
   return { inputs, filters: filters.join(";"), maps, perInputOptionsByIndex };
 }
 
