@@ -657,9 +657,9 @@ function validateBackgroundImageParameters(backgroundImage) {
     throw badRequest('Background image must have a valid URL');
   }
   
-  if (backgroundImage.scaleVideo !== undefined) {
-    if (typeof backgroundImage.scaleVideo !== 'number' || backgroundImage.scaleVideo <= 0) {
-      throw badRequest('Background image scaleVideo must be a positive number');
+  if (backgroundImage.padding !== undefined) {
+    if (typeof backgroundImage.padding !== 'number' || backgroundImage.padding <= 0 || backgroundImage.padding >= 0.5) {
+      throw badRequest('Background image padding must be a positive number');
     }
   }
 }
@@ -2092,10 +2092,10 @@ async function buildBackgroundGraph(playlistPath, assets, backgroundConfig, lowQ
   let videoStream = "0:v";
   const audioStreams = [];
 
-  // ---- 读取并规整“边界百分比”参数（用原来的 scaleVideo 字段）----
-  let padding = backgroundConfig?.backgroundImage?.scaleVideo;
+  // ---- 读取并规整“边界百分比”参数（用原来的 padding 字段）----
+  let padding = backgroundConfig?.backgroundImage?.padding;
   if (!(typeof padding === 'number') || padding <= 0 || padding >= 1) {
-    padding = 0.05; // 默认 10%
+    padding = 0.05; // 默认 5%
   }
 
   // ---- ffprobe 主视频尺寸 ----
