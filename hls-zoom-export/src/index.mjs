@@ -2087,19 +2087,18 @@ async function buildBackgroundGraph(playlistPath, assets, backgroundConfig, lowQ
   const maps = [];
   const perInputOptionsByIndex = {}; // 记录输入级选项（比如 -stream_loop -1）
 
-  console.log(`🎵 输入文件列表: [${inputs.join(', ')}]`);
+  // ★ 开关：是否“以主视频为主”（true=主视频固定尺寸；false=背景固定尺寸<现有逻辑>）
+  const FIX_MAIN_VIDEO = true; // TODO: 暂时写死；后续可从payload/配置传入
+
+  // ---- 读取并规整 padding ----
+  let padding = backgroundConfig?.backgroundImage?.padding;
+  if (!(typeof padding === 'number') || padding <= 0 || padding >= 0.5) padding = 0.05; // 0~0.5
 
   let videoStream = "0:v";
   const audioStreams = [];
 
-  // ---- 读取并规整“边界百分比”参数（用原来的 padding 字段）----
-  let padding = backgroundConfig?.backgroundImage?.padding;
-  if (!(typeof padding === 'number') || padding <= 0 || padding >= 1) {
-    padding = 0.05; // 默认 5%
-  }
-
-  // ---- ffprobe 主视频尺寸 ----
-  const mainInfo = await getVideoInfo(playlistPath); // { width, height, ... }
+  // ---- 主视频尺寸 ----
+  const mainInfo = await getVideoInfo(playlistPath);
   const fw = mainInfo?.width  || 1920;
   const fh = mainInfo?.height || 1080;
 
@@ -2111,71 +2110,116 @@ async function buildBackgroundGraph(playlistPath, assets, backgroundConfig, lowQ
     // 背景信息（判断是否视频 + 尺寸）
     let isVideo = false;
     let bgW = 1920, bgH = 1080;
-
     try {
       const info = await getBackgroundFileInfo(assets.bgImage);
       isVideo = !!info?.isVideo;
-      if (info?.width > 0 && info?.height > 0) {
-        bgW = info.width;
-        bgH = info.height;
-      }
+      if (info?.width > 0 && info?.height > 0) { bgW = info.width; bgH = info.height; }
     } catch (e) {
-      console.warn('⚠️ 背景类型/尺寸检测失败，使用缺省分辨率 1920x1080：', e?.message || e);
+      console.warn('⚠️ 背景类型/尺寸检测失败，使用 1920x1080：', e?.message || e);
     }
 
-    // ---- 比较宽高比来决定缩放逻辑 ----
-    const even = (n) => Math.max(2, Math.floor(n / 2) * 2); // H.264 要求偶数
-    let outW, outH, posX, posY;
+    const even = (n) => Math.max(2, Math.round(n / 2) * 2); // 就近取偶，避免留白误差
 
-    const mainAR = fw / fh;   // 主视频宽高比
-    const bgAR   = bgW / bgH; // 背景宽高比
-
-    if (mainAR >= bgAR) {
-      // 主视频更宽（扁） → 按宽度贴边
-      const boxW = bgW * (1 - 2 * padding);
-      const scale = boxW / fw;
-      outW = even(boxW);
-      outH = even(fh * scale);
-      posX = Math.round(bgW * padding);
-      posY = Math.round((bgH - outH) / 2);
-    } else {
-      // 主视频更高（竖） → 按高度贴边
-      const boxH = bgH * (1 - 2 * padding);
-      const scale = boxH / fh;
-      outH = even(boxH);
-      outW = even(fw * scale);
-      posX = Math.round((bgW - outW) / 2);
-      posY = Math.round(bgH * padding);
-    }
-
-    // ---- 组装滤镜 ----
-    if (isVideo) {
+    if (FIX_MAIN_VIDEO) {
+      // ======================
+      // 模式B：以主视频为主（主视频不缩放；背景去适配 + 预留 padding）
+      const mainAR = fw / fh;
+      const bgAR   = bgW / bgH;
+    
+      // 就近取偶，避免编码器报奇数尺寸
+      const even = (n) => Math.max(2, Math.round(n / 2) * 2);
+    
+      let canvasW, canvasH, posX, posY;
+    
+      if (mainAR >= bgAR) {
+        // 主视频更“扁” → 以横向为基准：左右各留 padding
+        canvasW = even(fw / (1 - 2 * padding));
+        canvasH = even(canvasW / bgAR);
+    
+        console.log("📐 模式B：横向为基准");
+      } else {
+        // 主视频更“竖” → 以纵向为基准：上下各留 padding
+        canvasH = even(fh / (1 - 2 * padding));
+        canvasW = even(canvasH * bgAR);
+    
+        console.log("📐 模式B：纵向为基准");
+      }
+    
+      // 主视频不缩放，直接居中贴到画布上
+      posX = Math.round((canvasW - fw) / 2);
+      posY = Math.round((canvasH - fh) / 2);
+    
+      // ---- 打印详细尺寸信息 ----
+      console.log("📊 尺寸信息:", {
+        mainVideo: { fw, fh, AR: mainAR.toFixed(4) },
+        background: { bgW, bgH, AR: bgAR.toFixed(4) },
+        canvas: { canvasW, canvasH },
+        overlayPos: { posX, posY },
+        padding
+      });
+    
+      // 背景缩放到“画布尺寸”
+      const bgPrep = isVideo
+        ? `[${bgIndex}:v]setpts=PTS-STARTPTS,setsar=1,scale=${canvasW}:${canvasH}[bg]`
+        : `[${bgIndex}:v]loop=loop=-1:size=1:start=0,setsar=1,scale=${canvasW}:${canvasH}[bg]`;
+    
+      // 主视频不缩放，只做时间与 SAR 归一
+      const fgPrep = `[${videoStream}]setpts=PTS-STARTPTS,setsar=1[inner]`;
+    
       filters.push(
-        `[${bgIndex}:v]setpts=PTS-STARTPTS,setsar=1[bg];` +
-        `[${videoStream}]setpts=PTS-STARTPTS,setsar=1,scale=${outW}:${outH}[inner];` +
+        bgPrep + ';' +
+        fgPrep + ';' +
+        `[bg][inner]overlay=${posX}:${posY}:shortest=1[vout]`
+      );
+      videoStream = 'vout';
+    
+      // 背景为视频则无限循环
+      if (isVideo) perInputOptionsByIndex[bgIndex] = ['-stream_loop', '-1'];
+    } else {
+      // ======================
+      // 模式A：以背景为主（你现有逻辑：背景尺寸固定；主视频缩放贴边 + padding）
+      const mainAR = fw / fh;
+      const bgAR   = bgW / bgH;
+      let outW, outH, posX, posY;
+
+      if (mainAR >= bgAR) {
+        // 主更宽 → 按宽贴边
+        const boxW = bgW * (1 - 2 * padding);
+        const scale = boxW / fw;
+        outW = even(boxW);
+        outH = even(fh * scale);
+        posX = Math.round(bgW * padding);
+        posY = Math.round((bgH - outH) / 2);
+      } else {
+        // 主更高 → 按高贴边
+        const boxH = bgH * (1 - 2 * padding);
+        const scale = boxH / fh;
+        outH = even(boxH);
+        outW = even(fw * scale);
+        posX = Math.round((bgW - outW) / 2);
+        posY = Math.round(bgH * padding);
+      }
+
+      const bgPrep = isVideo
+        ? `[${bgIndex}:v]setpts=PTS-STARTPTS,setsar=1[bg]`
+        : `[${bgIndex}:v]loop=loop=-1:size=1:start=0,setsar=1[bg]`;
+
+      const fgPrep = `[${videoStream}]setpts=PTS-STARTPTS,setsar=1,scale=${outW}:${outH}[inner]`;
+
+      filters.push(
+        bgPrep + ';' +
+        fgPrep + ';' +
         `[bg][inner]overlay=${posX}:${posY}:shortest=1[vout]`
       );
       videoStream = 'vout';
 
-      // 背景视频无限循环
-      perInputOptionsByIndex[bgIndex] = ['-stream_loop', '-1'];
-
-    } else {
-      filters.push(
-        `[${bgIndex}:v]loop=loop=-1:size=1:start=0,setsar=1[bg];` +
-        `[${videoStream}]setpts=PTS-STARTPTS,setsar=1,scale=${outW}:${outH}[inner];` +
-        `[bg][inner]overlay=${posX}:${posY}:shortest=1[vout]`
-      );
-      videoStream = 'vout';
+      if (isVideo) perInputOptionsByIndex[bgIndex] = ['-stream_loop', '-1'];
     }
   }
 
-  // 2) 处理音频（保持你的原逻辑）
+  // 2) 音频（原样保留）
   const wantOriginal = !assets.aiAudio;
-  if (wantOriginal) {
-    audioStreams.push("0:a");
-    console.log("🎵 保留原视频音频流: 0:a");
-  }
+  if (wantOriginal) audioStreams.push("0:a");
 
   if (assets.bgAudio) {
     inputs.push(assets.bgAudio);
@@ -2191,23 +2235,19 @@ async function buildBackgroundGraph(playlistPath, assets, backgroundConfig, lowQ
     audioStreams.push(`${aiAudioIndex}:a`);
   }
 
-  // 3) 音频混合
+  // 3) 混音（原样）
   let finalAudio = "";
   if (audioStreams.length === 1) {
     finalAudio = audioStreams[0];
   } else if (audioStreams.length > 1) {
     const amixInputs = audioStreams.map(s => `[${s}]`).join("");
-    filters.push(
-      `${amixInputs}amix=inputs=${audioStreams.length}:duration=first:dropout_transition=2[aout]`
-    );
+    filters.push(`${amixInputs}amix=inputs=${audioStreams.length}:duration=first:dropout_transition=2[aout]`);
     finalAudio = "aout";
   }
 
-  // 4) 输出映射
+  // 4) 映射（原样）
   maps.push(`-map ${videoStream.includes(":") ? videoStream : `[${videoStream}]`}`);
-  if (finalAudio) {
-    maps.push(`-map ${finalAudio.includes(":") ? finalAudio : `[${finalAudio}]`}`);
-  }
+  if (finalAudio) maps.push(`-map ${finalAudio.includes(":") ? finalAudio : `[${finalAudio}]`}`);
 
   return { inputs, filters: filters.join(";"), maps, perInputOptionsByIndex };
 }
