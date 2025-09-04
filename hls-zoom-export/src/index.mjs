@@ -2099,7 +2099,7 @@ async function buildBackgroundGraph(playlistPath, assets, backgroundConfig, lowQ
   const perInputOptionsByIndex = {}; // 记录输入级选项（比如 -stream_loop -1）
 
   // ★ 开关：是否“以主视频为主”（true=主视频固定尺寸；false=背景固定尺寸<现有逻辑>）
-  const FIX_MAIN_VIDEO = true; // TODO: 暂时写死；后续可从payload/配置传入
+  const FIX_MAIN_VIDEO = false; // TODO: 暂时写死；后续可从payload/配置传入
 
   // ---- 读取并规整 padding ----
   let padding = backgroundConfig?.backgroundImage?.padding;
