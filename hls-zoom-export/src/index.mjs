@@ -1236,15 +1236,26 @@ async function processZoom({ inputDir, outputDir, playlistPath, recordingId, zoo
           )
         )
       )`;
+
+      let preW = preScaleWidth;
+      let preH = Math.round(preW * origHeight / origWidth);
+      if (preW % 2) preW--;
+      if (preH % 2) preH--;
+
       const filterComplex = [
-        `[0:v]fps=${fps},scale=${preScaleWidth}:-1,split=3[pre][zoom][post];`,
-        `[zoom]trim=start=${relZoomStart}:end=${relZoomEnd},setpts=PTS-STARTPTS,`,
-        `zoompan=z='${zoomFormula}':`,
-        `x='${x}*iw-iw/zoom/2':`,
-        `y='${y}*ih-ih/zoom/2':`,
-        `d=1:fps=${fps}:s=${preScaleWidth}x${Math.floor(preScaleWidth * origHeight / origWidth)}[zoomed];`,
+        `[0:v]fps=${fps},scale=${preW}:-1,split=3[pre][zoom][post];`,
+
+        `[zoom]trim=start=${relZoomStart}:end=${relZoomEnd},setpts=PTS-STARTPTS,` +
+        `zoompan=` +
+          `z='${zoomFormula}':` +
+          // ★ 锚点缩放：让锚点在输出像素位置保持不变（无 pad、无 clamp、无黑边）
+          `x='(1 - 1/(${zoomFormula})) * (${x}) * iw':` +
+          `y='(1 - 1/(${zoomFormula})) * (${y}) * ih':` +
+          `d=1:fps=${fps}:s=${preW}x${preH}[zoomed];`,
+
         `[pre]trim=end=${relZoomStart},setpts=PTS-STARTPTS[first];`,
         `[post]trim=start=${relZoomEnd},setpts=PTS-STARTPTS[last];`,
+
         `[first]scale=${width}:${height}:flags=lanczos,setsar=1:1[first_scaled];`,
         `[zoomed]scale=${width}:${height}:flags=lanczos,setsar=1:1[zoomed_scaled];`,
         `[last]scale=${width}:${height}:flags=lanczos,setsar=1:1[last_scaled];`,
