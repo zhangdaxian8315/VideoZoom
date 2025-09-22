@@ -2238,6 +2238,8 @@ async function buildBackgroundGraph(playlistPath, assets, backgroundConfig, lowQ
     const volume = backgroundConfig.backgroundAudio?.volume ?? 0.5;
     filters.push(`[${bgAudioIndex}:a]volume=${volume}[bgm]`);
     audioStreams.push("bgm");
+
+    perInputOptionsByIndex[bgAudioIndex] = ['-stream_loop', '-1'];
   }
 
   if (assets.aiAudio) {
