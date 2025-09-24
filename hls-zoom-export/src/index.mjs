@@ -223,7 +223,8 @@ export const handler = async (event) => {
           backgroundConfig: {
             backgroundImage: spec.backgroundImage,
             backgroundAudio: spec.backgroundAudio,
-            aiNarrationAudio: spec.aiNarrationAudio
+            aiNarrationAudio: spec.aiNarrationAudio,
+            overlay: spec.overlay  // 🎨 新增：传递 overlay 参数
           },
           lowQuality: spec.lowQuality === 'true' ? true : false,
           spec
@@ -560,6 +561,12 @@ function parsePayload(raw) {
     console.log("✅ AI旁白音频参数校验通过");
   }
   
+  // 🎨 新增：overlay 参数校验（可选）
+  if (body.overlay) {
+    validateOverlayParameters(body.overlay);
+    console.log("✅ Overlay 参数校验通过");
+  }
+  
   // 将配置开关添加到返回的对象中
   return {
     ...body,
@@ -681,6 +688,33 @@ function validateBackgroundAudioParameters(backgroundAudio) {
 function validateAiNarrationAudioParameters(aiNarrationAudio) {
   if (!aiNarrationAudio.url || typeof aiNarrationAudio.url !== 'string') {
     throw badRequest('AI narration audio must have a valid URL');
+  }
+}
+
+// 🎨 新增：Overlay 参数校验函数
+function validateOverlayParameters(overlay) {
+  if (!overlay || typeof overlay !== 'object') {
+    throw badRequest('Overlay must be an object');
+  }
+  
+  if (overlay.main && typeof overlay.main === 'object') {
+    if (overlay.main.border && typeof overlay.main.border === 'object') {
+      if (overlay.main.border.shape && typeof overlay.main.border.shape === 'object') {
+        const { type, radiusPx } = overlay.main.border.shape;
+        
+        // 验证 type 参数
+        if (type !== undefined && !['none', 'rounded'].includes(type)) {
+          throw badRequest('Overlay main border shape type must be "none" or "rounded"');
+        }
+        
+        // 验证 radiusPx 参数
+        if (type === 'rounded' && radiusPx !== undefined) {
+          if (typeof radiusPx !== 'number' || radiusPx < 0 || radiusPx > 1000) {
+            throw badRequest('Overlay main border shape radiusPx must be a number between 0 and 1000');
+          }
+        }
+      }
+    }
   }
 }
 
@@ -2105,6 +2139,18 @@ async function buildBackgroundGraph(playlistPath, assets, backgroundConfig, lowQ
   let padding = backgroundConfig?.backgroundImage?.padding;
   if (!(typeof padding === 'number') || padding <= 0 || padding >= 0.5) padding = 0.05; // 0~0.5
 
+  // ---- 读取 overlay 配置 ----
+  const overlayConfig = backgroundConfig?.overlay;
+  const borderConfig = overlayConfig?.main?.border?.shape;
+  const useRoundedBorder = borderConfig?.type === 'rounded';
+  const borderRadiusPx = borderConfig?.radiusPx || 80;
+  
+  console.log(`🎨 Overlay 配置:`, { 
+    useRoundedBorder, 
+    borderRadiusPx, 
+    borderConfig 
+  });
+
   let videoStream = "0:v";
   const audioStreams = [];
 
@@ -2174,14 +2220,49 @@ async function buildBackgroundGraph(playlistPath, assets, backgroundConfig, lowQ
         ? `[${bgIndex}:v]setpts=PTS-STARTPTS,setsar=1,scale=${canvasW}:${canvasH}[bg]`
         : `[${bgIndex}:v]loop=loop=-1:size=1:start=0,setsar=1,scale=${canvasW}:${canvasH}[bg]`;
     
-      // 主视频不缩放，只做时间与 SAR 归一
-      const fgPrep = `[${videoStream}]setpts=PTS-STARTPTS,setsar=1[inner]`;
-    
-      filters.push(
-        bgPrep + ';' +
-        fgPrep + ';' +
-        `[bg][inner]overlay=${posX}:${posY}:shortest=1[vout]`
-      );
+       // === 读取圆角配置 ===
+       const shapeCfg = backgroundConfig?.overlay?.main?.border?.shape || {};
+       const wantRounded = shapeCfg?.type === 'rounded';
+       const radiusPxCfg = Number(shapeCfg?.radiusPx);
+       const radiusRatioCfg = Number(shapeCfg?.radiusRatio);
+
+       // 依据主视频尺寸计算半径（优先用像素；否则按比例；缺省=0）
+       let R = 0;
+       if (Number.isFinite(radiusPxCfg) && radiusPxCfg > 0) {
+         R = Math.floor(radiusPxCfg);
+       } else if (Number.isFinite(radiusRatioCfg) && radiusRatioCfg > 0 && radiusRatioCfg < 0.5) {
+         R = Math.floor(Math.min(fw, fh) * radiusRatioCfg);
+       }
+       R = Math.max(0, Math.min(R, Math.floor(Math.min(fw, fh) / 2)));
+
+       console.log('🎨 模式B圆角配置:', { wantRounded, R, fw, fh });
+
+       // === 前景预处理：主视频不缩放，得到 [inner0] ===
+       const fgBase = `[${videoStream}]setpts=PTS-STARTPTS,setsar=1[inner0]`;
+
+       // === 若启用圆角：对 [inner0] 添加 alpha 遮罩，产出 [inner]；否则直接把 [inner0] 当 [inner] 用 ===
+       let fgWithCorner;
+       if (wantRounded && R > 0) {
+         // 高赞答案思路：format=yuva420p + geq 只写 a(Alpha) 平面，做四角圆角
+         // 说明：整段 filter_complex 外层会被双引号包起来，所以这里内部用单引号
+         fgWithCorner =
+           `${fgBase};` +
+           `[inner0]format=yuva420p,` +
+           `geq=lum='p(X,Y)':` +
+           `a='if(gt(abs(W/2-X),W/2-${R})*gt(abs(H/2-Y),H/2-${R}),` +
+           `if(lte(hypot(${R}-(W/2-abs(W/2-X)),${R}-(H/2-abs(H/2-Y))),${R}),255,0),` +
+           `255)'[inner]`;
+       } else {
+         // 不做圆角，重命名成 [inner] 以复用后续 overlay 逻辑
+         fgWithCorner = `${fgBase};[inner0]copy[inner]`;
+       }
+
+       // === 组装：把前景（已圆角的 [inner]）叠到背景 ===
+       filters.push(
+         `${bgPrep};` +
+         `${fgWithCorner};` +
+         `[bg][inner]overlay=${posX}:${posY}:shortest=1[vout]`
+       );
       videoStream = 'vout';
     
       // 背景为视频则无限循环
@@ -2215,13 +2296,49 @@ async function buildBackgroundGraph(playlistPath, assets, backgroundConfig, lowQ
         ? `[${bgIndex}:v]setpts=PTS-STARTPTS,setsar=1[bg]`
         : `[${bgIndex}:v]loop=loop=-1:size=1:start=0,setsar=1[bg]`;
 
-      const fgPrep = `[${videoStream}]setpts=PTS-STARTPTS,setsar=1,scale=${outW}:${outH}[inner]`;
+       // === 读取圆角配置 ===
+       const shapeCfg = backgroundConfig?.overlay?.main?.border?.shape || {};
+       const wantRounded = shapeCfg?.type === 'rounded';
+       const radiusPxCfg = Number(shapeCfg?.radiusPx);
+       const radiusRatioCfg = Number(shapeCfg?.radiusRatio);
 
-      filters.push(
-        bgPrep + ';' +
-        fgPrep + ';' +
-        `[bg][inner]overlay=${posX}:${posY}:shortest=1[vout]`
-      );
+       // 依据缩放后的前景尺寸计算半径（优先用像素；否则按比例；缺省=0）
+       let R = 0;
+       if (Number.isFinite(radiusPxCfg) && radiusPxCfg > 0) {
+         R = Math.floor(radiusPxCfg);
+       } else if (Number.isFinite(radiusRatioCfg) && radiusRatioCfg > 0 && radiusRatioCfg < 0.5) {
+         R = Math.floor(Math.min(outW, outH) * radiusRatioCfg);
+       }
+       R = Math.max(0, Math.min(R, Math.floor(Math.min(outW, outH) / 2)));
+
+       console.log('🎨 模式A圆角配置:', { wantRounded, R, outW, outH });
+
+       // === 前景预处理：缩放到 outW:outH，得到 [inner0] ===
+       const fgBase = `[${videoStream}]setpts=PTS-STARTPTS,setsar=1,scale=${outW}:${outH}[inner0]`;
+
+       // === 若启用圆角：对 [inner0] 添加 alpha 遮罩，产出 [inner]；否则直接把 [inner0] 当 [inner] 用 ===
+       let fgWithCorner;
+       if (wantRounded && R > 0) {
+         // 高赞答案思路：format=yuva420p + geq 只写 a(Alpha) 平面，做四角圆角
+         // 说明：整段 filter_complex 外层会被双引号包起来，所以这里内部用单引号
+         fgWithCorner =
+           `${fgBase};` +
+           `[inner0]format=yuva420p,` +
+           `geq=lum='p(X,Y)':` +
+           `a='if(gt(abs(W/2-X),W/2-${R})*gt(abs(H/2-Y),H/2-${R}),` +
+           `if(lte(hypot(${R}-(W/2-abs(W/2-X)),${R}-(H/2-abs(H/2-Y))),${R}),255,0),` +
+           `255)'[inner]`;
+       } else {
+         // 不做圆角，重命名成 [inner] 以复用后续 overlay 逻辑
+         fgWithCorner = `${fgBase};[inner0]copy[inner]`;
+       }
+
+       // === 组装：把前景（已圆角的 [inner]）叠到背景 ===
+       filters.push(
+         `${bgPrep};` +
+         `${fgWithCorner};` +
+         `[bg][inner]overlay=${posX}:${posY}:shortest=1[vout]`
+       );
       videoStream = 'vout';
 
       if (isVideo) perInputOptionsByIndex[bgIndex] = ['-stream_loop', '-1'];
